@@ -1,0 +1,14 @@
+# Generated output
+node_modules/
+dist/
+coverage/
+
+# Package manager lockfiles (machine-generated)
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Environment files
+.env
+.env.*
+!.env.example

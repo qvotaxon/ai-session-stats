@@ -1,0 +1,9 @@
+packages:
+  - apps/frontend
+
+allowBuilds:
+  esbuild: true
+
+overrides:
+  zod: ">=4.6.6"
+  minimatch: ">=11.0.1"

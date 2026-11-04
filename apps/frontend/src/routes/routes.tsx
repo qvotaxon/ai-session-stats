@@ -1,0 +1,45 @@
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+  type RouterHistory,
+} from "@tanstack/react-router";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { NotFound } from "@/components/layout/NotFound";
+import { sessionsSearchSchema } from "@/features/sessions/searchParams";
+
+const rootRoute = createRootRoute({
+  component: AppLayout,
+  notFoundComponent: () => <NotFound />,
+});
+
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  validateSearch: sessionsSearchSchema,
+  component: lazyRouteComponent(() => import("../pages/SessionsPage")),
+});
+
+const sessionDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/sessions/$sessionId",
+  component: lazyRouteComponent(() => import("../pages/SessionDetailPage")),
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, sessionDetailRoute]);
+
+export const createAppRouter = (history?: RouterHistory) => createRouter({ routeTree, history });
+
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: ReturnType<typeof createAppRouter>;
+  }
+}
+
+export const router = createAppRouter();
+
+/** Router bound to an in-memory history, for tests. */
+export const createTestRouter = (initialPath: string) =>
+  createAppRouter(createMemoryHistory({ initialEntries: [initialPath] }));

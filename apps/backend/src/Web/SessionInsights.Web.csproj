@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="Scalar.AspNetCore" />
+    <PackageReference Include="Serilog.AspNetCore" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Application\SessionInsights.Application.csproj" />
+    <ProjectReference Include="..\Infrastructure\SessionInsights.Infrastructure.csproj" />
+    <ProjectReference Include="..\ServiceDefaults\SessionInsights.ServiceDefaults.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SessionInsights.Web.Tests" />
+  </ItemGroup>
+</Project>

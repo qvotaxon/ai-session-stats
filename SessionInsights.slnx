@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="apps/backend/src/Domain/SessionInsights.Domain.csproj" />
+    <Project Path="apps/backend/src/Application/SessionInsights.Application.csproj" />
+    <Project Path="apps/backend/src/Infrastructure/SessionInsights.Infrastructure.csproj" />
+    <Project Path="apps/backend/src/ServiceDefaults/SessionInsights.ServiceDefaults.csproj" />
+    <Project Path="apps/backend/src/Web/SessionInsights.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="apps/backend/tests/Application.Tests/SessionInsights.Application.Tests.csproj" />
+    <Project Path="apps/backend/tests/Infrastructure.Tests/SessionInsights.Infrastructure.Tests.csproj" />
+    <Project Path="apps/backend/tests/Web.Tests/SessionInsights.Web.Tests.csproj" />
+  </Folder>
+</Solution>

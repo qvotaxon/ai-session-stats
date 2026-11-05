@@ -7,7 +7,8 @@
 [CmdletBinding()]
 param(
     [string] $InstallPath = (Join-Path $env:LOCALAPPDATA 'SessionInsights\app'),
-    [switch] $SkipFrontend
+    [switch] $SkipFrontend,
+    [switch] $PublishedApp
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,17 +27,34 @@ if ($legacy) {
     throw "A legacy Windows service named '$taskName' exists (status: $($legacy.Status)). From an elevated prompt run: sc.exe stop $taskName; sc.exe delete $taskName. Then run this script again."
 }
 
-Write-Host "Publishing to $InstallPath ..."
-dotnet publish $project --configuration Release --output $InstallPath --no-self-contained
-if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
-
-if (-not $SkipFrontend) {
-    if (-not (Test-Path (Join-Path $dist 'index.html'))) {
-        throw "Frontend build not found at $dist. Run 'pnpm build' in apps\frontend, or pass -SkipFrontend."
+if ($PublishedApp) {
+    if (-not (Test-Path (Join-Path $InstallPath 'SessionInsights.Web.exe'))) {
+        throw "Published application not found at $InstallPath."
     }
-    $wwwroot = Join-Path $InstallPath 'wwwroot'
-    New-Item -ItemType Directory -Force -Path $wwwroot | Out-Null
-    Copy-Item -Path (Join-Path $dist '*') -Destination $wwwroot -Recurse -Force
+
+    if (-not (Test-Path (Join-Path $InstallPath 'wwwroot\index.html'))) {
+        throw "Published frontend not found in $InstallPath\wwwroot."
+    }
+
+}
+else {
+    Write-Host "Publishing to $InstallPath ..."
+    dotnet publish $project --configuration Release --output $InstallPath --no-self-contained
+    if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
+
+    if (-not $SkipFrontend) {
+        if (-not (Test-Path (Join-Path $dist 'index.html'))) {
+            throw "Frontend build not found at $dist. Run 'pnpm build' in apps\frontend, or pass -SkipFrontend."
+        }
+        $wwwroot = Join-Path $InstallPath 'wwwroot'
+        New-Item -ItemType Directory -Force -Path $wwwroot | Out-Null
+        Copy-Item -Path (Join-Path $dist '*') -Destination $wwwroot -Recurse -Force
+    }
+}
+
+$updater = Join-Path $PSScriptRoot 'update-release.ps1'
+if (Test-Path $updater) {
+    Copy-Item $updater (Join-Path $InstallPath 'update-release.ps1') -Force
 }
 
 $exe = Join-Path $InstallPath 'SessionInsights.Web.exe'

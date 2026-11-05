@@ -40,6 +40,11 @@ $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $open = $menu.Items.Add('Open dashboard')
 $open.Font = New-Object System.Drawing.Font($open.Font, [System.Drawing.FontStyle]::Bold)
 $restart = $menu.Items.Add('Restart server')
+$versionItem = $menu.Items.Add('Installed version: checking...')
+$versionItem.Enabled = $false
+$checkForUpdates = $menu.Items.Add('Check for updates')
+$updateAvailable = $menu.Items.Add('Update available')
+$updateAvailable.Visible = $false
 $menu.Items.Add('-') | Out-Null
 $quit = $menu.Items.Add('Quit tray icon')
 $notify.ContextMenuStrip = $menu
@@ -75,6 +80,66 @@ $probeScript = {
 $script:probe = $null
 $script:probeHandle = $null
 $script:graceUntil = [DateTime]::MinValue
+$script:latestTag = $null
+$script:checkRequested = $false
+
+$script:updateCheckScript = {
+    param($port)
+    $current = Invoke-RestMethod -Uri "http://127.0.0.1:$port/version" -TimeoutSec 5
+    if ($current.version -notmatch '^\d+\.\d+\.\d+$') {
+        throw 'The installed application returned an invalid version.'
+    }
+
+    $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/qvotaxon/ai-session-stats/releases/latest' `
+        -Headers @{ 'User-Agent' = 'SessionInsightsTray' } -TimeoutSec 15
+    $tag = [string]$release.tag_name
+    if ($release.prerelease -or $release.draft -or $tag -notmatch '^v\d+\.\d+\.\d+$') {
+        throw 'GitHub did not return a supported stable release.'
+    }
+
+    $currentVersion = [version]$current.version
+    $latestVersion = [version]$tag.Substring(1)
+    [pscustomobject]@{
+        CurrentVersion = $current.version
+        LatestVersion = $latestVersion.ToString(3)
+        LatestTag = $tag
+        Available = ($latestVersion -gt $currentVersion)
+    }
+}
+$script:updateCheck = $null
+$script:updateCheckHandle = $null
+$script:startUpdateCheck = {
+    if ($script:updateCheck) { return }
+    $script:checkForUpdates.Enabled = $false
+    $script:versionItem.Text = 'Installed version: checking...'
+    $script:updateCheck = [powershell]::Create().AddScript($script:updateCheckScript).AddArgument($Port)
+    $script:updateCheckHandle = $script:updateCheck.BeginInvoke()
+}
+
+$checkForUpdates.add_Click({
+    $script:checkRequested = $true
+    & $script:startUpdateCheck
+})
+$updateAvailable.add_Click({
+    $tag = $script:latestTag
+    if (-not $tag -or $tag -notmatch '^v\d+\.\d+\.\d+$') { return }
+    $updater = Join-Path $env:LOCALAPPDATA 'SessionInsights\app\update-release.ps1'
+    if (-not (Test-Path $updater)) {
+        $notify.ShowBalloonTip(5000, 'Session Insights', 'This installation cannot update itself. Install a release build first.', [System.Windows.Forms.ToolTipIcon]::Error)
+        return
+    }
+
+    try {
+        $tempUpdater = Join-Path ([System.IO.Path]::GetTempPath()) ('SessionInsightsUpdate-' + [guid]::NewGuid().ToString('N') + '.ps1')
+        Copy-Item $updater $tempUpdater
+        $appPath = Join-Path $env:LOCALAPPDATA 'SessionInsights\app'
+        $arguments = "-NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$tempUpdater`" -ExpectedTag `"$tag`" -InstallPath `"$appPath`" -Port $Port"
+        Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden
+        $notify.ShowBalloonTip(5000, 'Session Insights', "Starting update to $tag...", [System.Windows.Forms.ToolTipIcon]::Info)
+    } catch {
+        $notify.ShowBalloonTip(5000, 'Session Insights', "Could not start the update: $($_.Exception.Message)", [System.Windows.Forms.ToolTipIcon]::Error)
+    }
+})
 
 $startProbe = {
     if ($script:probe) { return }
@@ -85,23 +150,58 @@ $startProbe = {
 $pollTimer = New-Object System.Windows.Forms.Timer
 $pollTimer.Interval = 250
 $pollTimer.add_Tick({
-    if (-not $script:probe -or -not $script:probeHandle.IsCompleted) { return }
-    try { $up = [bool]($script:probe.EndInvoke($script:probeHandle) | Select-Object -First 1) } catch { $up = $false }
-    $script:probe.Dispose()
-    $script:probe = $null
-    if ((Get-Date) -lt $script:graceUntil) { return }
-    if ($up) { $timer.Interval = 15000 }
-    $notify.Icon = if ($up) { $upIcon } else { $downIcon }
-    $notify.Text = if ($up) { 'Session Insights: running' } else { 'Session Insights: not running' }
+    if ($script:probe -and $script:probeHandle.IsCompleted) {
+        try { $up = [bool]($script:probe.EndInvoke($script:probeHandle) | Select-Object -First 1) } catch { $up = $false }
+        $script:probe.Dispose()
+        $script:probe = $null
+        if ((Get-Date) -ge $script:graceUntil) {
+            if ($up) { $timer.Interval = 15000 }
+            $notify.Icon = if ($up) { $upIcon } else { $downIcon }
+            $notify.Text = if ($up) { 'Session Insights: running' } else { 'Session Insights: not running' }
+        }
+    }
+
+    if ($script:updateCheck -and $script:updateCheckHandle.IsCompleted) {
+        try {
+            $result = $script:updateCheck.EndInvoke($script:updateCheckHandle) | Select-Object -First 1
+            $script:versionItem.Text = "Installed version: $($result.CurrentVersion)"
+            $script:latestTag = $result.LatestTag
+            $script:updateAvailable.Text = "Update to $($result.LatestTag)"
+            $script:updateAvailable.Visible = [bool]$result.Available
+            if ($result.Available -and $script:checkRequested) {
+                $notify.ShowBalloonTip(5000, 'Session Insights', "Update available: $($result.LatestTag)", [System.Windows.Forms.ToolTipIcon]::Info)
+            } elseif (-not $result.Available -and $script:checkRequested) {
+                $notify.ShowBalloonTip(3000, 'Session Insights', 'You are up to date.', [System.Windows.Forms.ToolTipIcon]::Info)
+            }
+        } catch {
+            $script:versionItem.Text = 'Installed version: unavailable'
+            $script:updateAvailable.Visible = $false
+            if ($script:checkRequested) {
+                $notify.ShowBalloonTip(5000, 'Session Insights', "Could not check for updates: $($_.Exception.Message)", [System.Windows.Forms.ToolTipIcon]::Error)
+            }
+        } finally {
+            $script:updateCheck.Dispose()
+            $script:updateCheck = $null
+            $script:checkForUpdates.Enabled = $true
+            $script:checkRequested = $false
+        }
+    }
 })
 
 $timer.add_Tick($startProbe)
+$updateCheckTimer = New-Object System.Windows.Forms.Timer
+$updateCheckTimer.Interval = 14400000
+$updateCheckTimer.add_Tick($script:startUpdateCheck)
+$updateCheckTimer.Start()
 $timer.Start()
 $pollTimer.Start()
 & $startProbe
+& $script:startUpdateCheck
 
 [System.Windows.Forms.Application]::Run()
 $timer.Dispose()
 $pollTimer.Dispose()
+$updateCheckTimer.Dispose()
 if ($script:probe) { $script:probe.Dispose() }
+if ($script:updateCheck) { $script:updateCheck.Dispose() }
 $notify.Dispose()

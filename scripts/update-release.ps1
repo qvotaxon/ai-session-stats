@@ -20,6 +20,8 @@ $backupPath = Join-Path $dataRoot ('app-backup-' + (Get-Date -Format 'yyyyMMddHH
 $oldTrayInstalled = $false
 $serverStopped = $false
 $appMoved = $false
+$lockPath = Join-Path $dataRoot 'update.lock'
+$lockStream = $null
 
 function Write-UpdateLog([string] $message) {
     Add-Content -Path $logPath -Value "[$(Get-Date -Format o)] $message"
@@ -73,6 +75,11 @@ try {
         throw "The installed application was not found at $InstallPath."
     }
     New-Item -ItemType Directory -Force -Path $dataRoot | Out-Null
+    try {
+        $lockStream = [System.IO.File]::Open($lockPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+    } catch {
+        throw 'Another update is already in progress.'
+    }
     New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
     Write-UpdateLog "Starting update to $ExpectedTag."
 
@@ -113,7 +120,8 @@ try {
         throw 'The downloaded release failed its SHA-256 check.'
     }
 
-    Expand-Archive -LiteralPath $archivePath -DestinationPath $packageRoot -Force
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $packageRoot)
     $newAppPath = Join-Path $packageRoot 'app'
     if (-not (Test-Path (Join-Path $newAppPath 'SessionInsights.Web.exe')) -or
         -not (Test-Path (Join-Path $newAppPath 'wwwroot\index.html')) -or
@@ -173,5 +181,9 @@ catch {
 finally {
     if (Test-Path $packageRoot) {
         Remove-Item $packageRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if ($lockStream) {
+        $lockStream.Dispose()
+        Remove-Item $lockPath -Force -ErrorAction SilentlyContinue
     }
 }

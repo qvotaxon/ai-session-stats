@@ -123,7 +123,8 @@ public sealed class SecurityMiddlewareTests(SecurityFixture factory) : IClassFix
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        body.ShouldContain("\"version\":\"");
+        var expectedVersion = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        body.ShouldBe($"{{\"version\":\"{expectedVersion}\"}}");
     }
 
     [Fact]

@@ -61,9 +61,9 @@ function Restore-PreviousInstall {
     }
 
     $installTask = Join-Path $packageRoot 'scripts\install-task.ps1'
-    & $installTask -InstallPath $InstallPath -PublishedApp
+    & $installTask -InstallPath $InstallPath -PublishedApp -SkipUpdaterCopy
     if ($oldTrayInstalled) {
-        & (Join-Path $packageRoot 'scripts\install-tray.ps1') -InstallPath $InstallPath
+        & (Join-Path $packageRoot 'scripts\install-tray.ps1') -InstallPath $InstallPath -Port $Port -SkipTrayCopy
     }
 }
 
@@ -76,7 +76,7 @@ try {
     }
     New-Item -ItemType Directory -Force -Path $dataRoot | Out-Null
     try {
-        $lockStream = [System.IO.File]::Open($lockPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+        $lockStream = [System.IO.FileStream]::new($lockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None, 4096, [System.IO.FileOptions]::DeleteOnClose)
     } catch {
         throw 'Another update is already in progress.'
     }
@@ -184,6 +184,5 @@ finally {
     }
     if ($lockStream) {
         $lockStream.Dispose()
-        Remove-Item $lockPath -Force -ErrorAction SilentlyContinue
     }
 }

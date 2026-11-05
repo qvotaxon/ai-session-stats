@@ -5,7 +5,8 @@
 [CmdletBinding()]
 param(
     [string] $InstallPath = (Join-Path $env:LOCALAPPDATA 'SessionInsights\app'),
-    [int] $Port = 5180
+    [int] $Port = 5180,
+    [switch] $SkipTrayCopy
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,7 +15,9 @@ $source = Join-Path $PSScriptRoot 'tray.ps1'
 $target = Join-Path $InstallPath 'tray.ps1'
 
 if (-not (Test-Path $InstallPath)) { throw "Install folder $InstallPath not found. Run scripts\install-task.ps1 first." }
-Copy-Item $source $target -Force
+if (-not $SkipTrayCopy) {
+    Copy-Item $source $target -Force
+}
 
 if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
     Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue

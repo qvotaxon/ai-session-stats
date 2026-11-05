@@ -123,7 +123,7 @@ $checkForUpdates.add_Click({
 $updateAvailable.add_Click({
     $tag = $script:latestTag
     if (-not $tag -or $tag -notmatch '^v\d+\.\d+\.\d+$') { return }
-    $updater = Join-Path $env:LOCALAPPDATA 'SessionInsights\app\update-release.ps1'
+    $updater = Join-Path $PSScriptRoot 'update-release.ps1'
     if (-not (Test-Path $updater)) {
         $notify.ShowBalloonTip(5000, 'Session Insights', 'This installation cannot update itself. Install a release build first.', [System.Windows.Forms.ToolTipIcon]::Error)
         return
@@ -132,9 +132,9 @@ $updateAvailable.add_Click({
     try {
         $tempUpdater = Join-Path ([System.IO.Path]::GetTempPath()) ('SessionInsightsUpdate-' + [guid]::NewGuid().ToString('N') + '.ps1')
         Copy-Item $updater $tempUpdater
-        $appPath = Join-Path $env:LOCALAPPDATA 'SessionInsights\app'
+        $appPath = $PSScriptRoot
         $arguments = "-NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$tempUpdater`" -ExpectedTag `"$tag`" -InstallPath `"$appPath`" -Port $Port"
-        Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden
+        Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden -WorkingDirectory ([System.IO.Path]::GetTempPath())
         $notify.ShowBalloonTip(5000, 'Session Insights', "Starting update to $tag...", [System.Windows.Forms.ToolTipIcon]::Info)
     } catch {
         $notify.ShowBalloonTip(5000, 'Session Insights', "Could not start the update: $($_.Exception.Message)", [System.Windows.Forms.ToolTipIcon]::Error)

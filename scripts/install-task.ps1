@@ -8,7 +8,8 @@
 param(
     [string] $InstallPath = (Join-Path $env:LOCALAPPDATA 'SessionInsights\app'),
     [switch] $SkipFrontend,
-    [switch] $PublishedApp
+    [switch] $PublishedApp,
+    [switch] $SkipUpdaterCopy
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,7 +54,7 @@ else {
 }
 
 $updater = Join-Path $PSScriptRoot 'update-release.ps1'
-if (Test-Path $updater) {
+if ((Test-Path $updater) -and -not $SkipUpdaterCopy) {
     Copy-Item $updater (Join-Path $InstallPath 'update-release.ps1') -Force
 }
 

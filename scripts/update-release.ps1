@@ -27,6 +27,31 @@ function Write-UpdateLog([string] $message) {
     Add-Content -Path $logPath -Value "[$(Get-Date -Format o)] $message"
 }
 
+function Merge-JsonConfiguration([object] $defaults, [object] $overrides) {
+    foreach ($property in $overrides.PSObject.Properties) {
+        $defaultProperty = $defaults.PSObject.Properties[$property.Name]
+        if ($defaultProperty -and
+            $defaultProperty.Value -is [System.Management.Automation.PSCustomObject] -and
+            $property.Value -is [System.Management.Automation.PSCustomObject]) {
+            Merge-JsonConfiguration $defaultProperty.Value $property.Value | Out-Null
+        } else {
+            $defaults | Add-Member -MemberType NoteProperty -Name $property.Name -Value $property.Value -Force
+        }
+    }
+    return $defaults
+}
+
+function Merge-JsonConfigurationFile([string] $defaultPath, [string] $overridePath) {
+    if (Test-Path -LiteralPath $defaultPath) {
+        $defaults = Get-Content -LiteralPath $defaultPath -Raw | ConvertFrom-Json
+        $overrides = Get-Content -LiteralPath $overridePath -Raw | ConvertFrom-Json
+        $merged = Merge-JsonConfiguration $defaults $overrides
+        $merged | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $defaultPath -Encoding UTF8
+    } else {
+        Copy-Item -LiteralPath $overridePath -Destination $defaultPath
+    }
+}
+
 function Stop-TaskAndProcesses([string] $taskName, [string] $processName, [string] $path) {
     if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
         Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
@@ -131,6 +156,11 @@ try {
         -not (Test-Path (Join-Path $newAppPath 'update-release.ps1'))) {
         throw 'The verified release archive does not contain a complete application.'
     }
+
+    Get-ChildItem -LiteralPath $InstallPath -Filter 'appsettings*.json' -File |
+        ForEach-Object {
+            Merge-JsonConfigurationFile -defaultPath (Join-Path $newAppPath $_.Name) -overridePath $_.FullName
+        }
 
     $oldTrayInstalled = [bool](Get-ScheduledTask -TaskName 'SessionInsightsTray' -ErrorAction SilentlyContinue)
     $serverStopped = $true

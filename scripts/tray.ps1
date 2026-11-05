@@ -134,7 +134,15 @@ $updateAvailable.add_Click({
         Copy-Item $updater $tempUpdater
         $appPath = $PSScriptRoot
         $arguments = "-NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$tempUpdater`" -ExpectedTag `"$tag`" -InstallPath `"$appPath`" -Port $Port"
-        Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WindowStyle Hidden -WorkingDirectory ([System.IO.Path]::GetTempPath())
+        $updateTaskName = 'SessionInsightsUpdate-' + [guid]::NewGuid().ToString('N')
+        $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory ([System.IO.Path]::GetTempPath())
+        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1)
+        $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+            -ExecutionTimeLimit ([TimeSpan]::Zero) -DeleteExpiredTaskAfter (New-TimeSpan -Minutes 1)
+        Register-ScheduledTask -TaskName $updateTaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+        Start-ScheduledTask -TaskName $updateTaskName
         $notify.ShowBalloonTip(5000, 'Session Insights', "Starting update to $tag...", [System.Windows.Forms.ToolTipIcon]::Info)
     } catch {
         $notify.ShowBalloonTip(5000, 'Session Insights', "Could not start the update: $($_.Exception.Message)", [System.Windows.Forms.ToolTipIcon]::Error)

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Shouldly;
 using SessionInsights.Application.Common;
@@ -156,6 +157,54 @@ public sealed class ReportCoordinatorTests
         call.Arguments.ShouldNotContain(a => a.Contains("dangerously") || a.Contains("allow-all"));
         (await coordinator.ReadContentAsync(run, TestContext.Current.CancellationToken)).ShouldBe("# Hello");
         tracker.HasActiveRun.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Claude_run_passes_only_the_configured_claude_config_dir()
+    {
+        var session = Given(SessionSource.Claude);
+        var options = Options();
+        options.Value.ClaudeConfigDir = @"C:\cfg\claude";
+        options.Value.CopilotHome = @"C:\cfg\copilot";
+
+        await RunAsync(options, session);
+
+        runner.Calls.Single().Environment.ShouldNotBeNull().ShouldBe(new Dictionary<string, string> { ["CLAUDE_CONFIG_DIR"] = @"C:\cfg\claude" });
+    }
+
+    [Fact]
+    public async Task Copilot_run_passes_only_the_configured_copilot_home()
+    {
+        var session = Given(SessionSource.Copilot);
+        var options = Options();
+        options.Value.ClaudeConfigDir = @"C:\cfg\claude";
+        options.Value.CopilotHome = @"C:\cfg\copilot";
+
+        await RunAsync(options, session);
+
+        runner.Calls.Single().Environment.ShouldNotBeNull().ShouldBe(new Dictionary<string, string> { ["COPILOT_HOME"] = @"C:\cfg\copilot" });
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Run_leaves_the_environment_untouched_when_the_option_is_unset_or_blank(string? value)
+    {
+        var session = Given(SessionSource.Claude);
+        var options = Options();
+        options.Value.ClaudeConfigDir = value;
+
+        await RunAsync(options, session);
+
+        runner.Calls.Single().Environment.ShouldBeNull();
+    }
+
+    private async Task RunAsync(IOptions<SessionInsightsOptions> options, Session session)
+    {
+        var coordinator = new ReportCoordinator(fs, index, excluded, runner, locator, tracker, options, TimeProvider.System, NullLogger<ReportCoordinator>.Instance);
+        var run = await coordinator.StartAsync(session.Id, TestContext.Current.CancellationToken);
+        await coordinator.ExecuteAsync(run.Id, TestContext.Current.CancellationToken);
     }
 
     [Fact]

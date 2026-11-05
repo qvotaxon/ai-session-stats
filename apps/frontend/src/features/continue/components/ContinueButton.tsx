@@ -37,7 +37,7 @@ export const ContinueButton = ({ sessionId, canContinue }: ContinueButtonProps) 
     <div className="inline-flex rounded-md shadow-xs">
       <Button
         className="rounded-r-none"
-        disabled={!canContinue || isPending}
+        disabled={!canContinue || isPending || setTerminal.isPending}
         onClick={continueSession}
       >
         <Terminal aria-hidden /> Continue in CLI
@@ -48,7 +48,7 @@ export const ContinueButton = ({ sessionId, canContinue }: ContinueButtonProps) 
             size="icon"
             className="rounded-l-none border-l border-primary-foreground/30"
             aria-label="Choose terminal"
-            disabled={!settings.data}
+            disabled={!settings.data || setTerminal.isPending}
           >
             <ChevronDown aria-hidden />
           </Button>
@@ -58,7 +58,11 @@ export const ContinueButton = ({ sessionId, canContinue }: ContinueButtonProps) 
           <DropdownMenuSeparator />
           <DropdownMenuRadioGroup value={settings.data?.terminal} onValueChange={(value) => setTerminal.mutate(value)}>
             {settings.data?.terminals.map((option) => (
-              <DropdownMenuRadioItem key={option.id} value={option.id} disabled={!option.available}>
+              <DropdownMenuRadioItem
+                key={option.id}
+                value={option.id}
+                disabled={!option.available || setTerminal.isPending}
+              >
                 {option.label}
               </DropdownMenuRadioItem>
             ))}

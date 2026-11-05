@@ -49,6 +49,11 @@ internal static class TerminalCommandBuilder
 
     public static string JoinArguments(IReadOnlyList<string> arguments) => string.Join(' ', arguments.Select(QuoteArgument));
 
+    public static string JoinCmdArguments(IReadOnlyList<string> arguments) =>
+        arguments.Count == 2 && arguments[0] == "/k"
+            ? $"/k \"{arguments[1]}\""
+            : JoinArguments(arguments);
+
     private static string PowerShellLine(string cli, IReadOnlyList<string> args) =>
         "& " + string.Join(' ', new[] { cli }.Concat(args).Select(a => "'" + a.Replace("'", "''", StringComparison.Ordinal) + "'"));
 
@@ -112,8 +117,10 @@ internal sealed class TerminalLauncher(IFileSystem fs, IExecutableLocator locato
         };
         var shellExe = locator.Locate(shellName) ?? throw new UnprocessableException($"{shellName} is not available on this machine.");
         var wtExe = locator.Locate("wt");
+        var cliExe = locator.Locate(cli) ?? throw new UnprocessableException("The configured CLI is not available on this machine.");
+        cliExe = fs.Path.GetFullPath(cliExe);
 
-        var command = TerminalCommandBuilder.Build(terminalId, shellExe, wtExe, workingDirectory, cli, cliArguments);
+        var command = TerminalCommandBuilder.Build(terminalId, shellExe, wtExe, workingDirectory, cliExe, cliArguments);
         var info = new ProcessStartInfo(command.FileName)
         {
             WorkingDirectory = command.WorkingDirectory,
@@ -121,7 +128,9 @@ internal sealed class TerminalLauncher(IFileSystem fs, IExecutableLocator locato
         };
         if (command.UseShellExecute)
         {
-            info.Arguments = TerminalCommandBuilder.JoinArguments(command.Arguments);
+            info.Arguments = terminalId == TerminalOptions.Cmd
+                ? TerminalCommandBuilder.JoinCmdArguments(command.Arguments)
+                : TerminalCommandBuilder.JoinArguments(command.Arguments);
         }
         else
         {

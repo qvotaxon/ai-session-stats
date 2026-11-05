@@ -36,6 +36,22 @@ public sealed class TerminalCommandBuilderTests
         TerminalCommandBuilder.JoinArguments(cmd.Arguments).ShouldBe($"/k \"claude --resume {Id}\"");
     }
 
+    [Fact]
+    public void Command_prompt_preserves_quotes_around_a_cli_path_with_spaces()
+    {
+        var cli = TerminalCommandBuilder.Build(
+            TerminalOptions.Cmd,
+            @"C:\cmd.exe",
+            null,
+            Cwd,
+            @"C:\Program Files\Claude\claude.exe",
+            ["--resume", Id]);
+
+        cli.Arguments.ShouldBe(["/k", $"\"C:\\Program Files\\Claude\\claude.exe\" --resume {Id}"]);
+        TerminalCommandBuilder.JoinCmdArguments(cli.Arguments)
+            .ShouldBe($"/k \"\"C:\\Program Files\\Claude\\claude.exe\" --resume {Id}\"");
+    }
+
     [Theory]
     [InlineData("claude & calc")]
     [InlineData("claude\" --x")]

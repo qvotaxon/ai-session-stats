@@ -69,6 +69,28 @@ describe("ContinueButton", () => {
     expect(screen.queryByText("This session looks active")).not.toBeInTheDocument();
   });
 
+  it("disables continuing and terminal choices while saving a terminal choice", async () => {
+    const user = userEvent.setup();
+    settings.get.mockResolvedValue({
+      terminal: "wt-pwsh",
+      terminals: [
+        { id: "wt-pwsh", label: "Windows Terminal + PowerShell 7", available: true },
+        { id: "cmd", label: "Command Prompt", available: true },
+      ],
+    });
+    settings.setTerminal.mockImplementation(() => new Promise(() => {}));
+    renderButton();
+
+    await user.click(screen.getByRole("button", { name: "Choose terminal" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "Command Prompt" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Continue in CLI/ })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Choose terminal" })).toBeDisabled();
+    });
+    expect(settings.setTerminal).toHaveBeenCalledWith("cmd");
+  });
+
   it("is disabled when the working folder is gone", () => {
     renderButton(false);
     expect(screen.getByRole("button", { name: /Continue in CLI/ })).toBeDisabled();

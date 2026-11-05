@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { ReportPanel } from "@/features/reports/components/ReportPanel";
+import { ContinueButton } from "@/features/continue/components/ContinueButton";
 import { ReportStatusBadge } from "@/features/reports/components/ReportStatusBadge";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import { DEFAULT_SESSIONS_SEARCH } from "../searchParams";
@@ -27,11 +28,16 @@ export const SessionDetailView = ({ session }: { session: SessionDetail }) => (
       >
         <ArrowLeft className="size-4" aria-hidden /> All sessions
       </Link>
-      <div className="flex flex-wrap items-center gap-2">
-        <SourceBadge source={session.source} />
-        {session.latestReportStatus && <ReportStatusBadge status={session.latestReportStatus} />}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <SourceBadge source={session.source} />
+            {session.latestReportStatus && <ReportStatusBadge status={session.latestReportStatus} />}
+          </div>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight break-words">{session.title || session.id}</h1>
+        </div>
+        <ContinueButton sessionId={session.id} canContinue={session.canContinue} />
       </div>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight break-words">{session.title || session.id}</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         {session.project ?? "No project"} · started {formatDateTime(session.startedAt)}
         {session.endedAt ? ` · ended ${formatDateTime(session.endedAt)}` : ""} ·{" "}

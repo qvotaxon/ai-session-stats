@@ -97,6 +97,7 @@ export const sessionDetailSchema = sessionSummarySchema.extend({
     .array(z.object({ bucketStart: z.string(), toolCalls: count, hooks: count, guards: count, tokens: count }))
     .default([]),
   notes: z.array(z.string()).default([]),
+  canContinue: z.boolean().default(false),
 });
 
 export type SessionSource = z.infer<typeof sourceSchema>;

@@ -112,7 +112,7 @@ public sealed class SessionQueryTests
     public async Task Missing_session_is_not_found()
     {
         index.FindAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new ValueTask<Session?>((Session?)null));
-        var handler = new GetSessionQueryHandler(index, reports);
+        var handler = new GetSessionQueryHandler(index, reports, Substitute.For<ITerminalLauncher>());
 
         await Should.ThrowAsync<NotFoundException>(async () => await handler.Handle(new GetSessionQuery(Guid.NewGuid().ToString("D")), TestContext.Current.CancellationToken));
     }

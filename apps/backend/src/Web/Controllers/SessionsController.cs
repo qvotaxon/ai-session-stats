@@ -5,8 +5,11 @@ using Mediator;
 using Microsoft.AspNetCore.Mvc;
 using SessionInsights.Application.Reports;
 using SessionInsights.Application.Sessions;
+using SessionInsights.Application.Terminals;
 
 namespace SessionInsights.Web.Controllers;
+
+public sealed record ContinueSessionRequest(bool Force);
 
 [ApiController]
 [Route("api/v1/sessions")]
@@ -54,6 +57,13 @@ public sealed class SessionsController(IMediator mediator) : ControllerBase
     {
         var content = await mediator.Send(new GetReportContentQuery(id, runId), cancellationToken);
         return File(System.Text.Encoding.UTF8.GetBytes(content.Markdown), "text/markdown; charset=utf-8", content.FileName);
+    }
+
+    [HttpPost("{id}/continue")]
+    public async Task<IActionResult> Continue(string id, [FromBody] ContinueSessionRequest? request, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new ContinueSessionCommand(id, request?.Force ?? false), cancellationToken);
+        return NoContent();
     }
 
     [HttpPost("{id}/reports/{runId}/cancel")]

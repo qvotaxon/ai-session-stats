@@ -11,14 +11,15 @@ public sealed record GetSessionQuery(string Id) : IQuery<SessionDetailDto>, IVal
     public string? Validate() => SessionIdFormat.IsValid(Id) ? null : "id must be a GUID.";
 }
 
-public sealed class GetSessionQueryHandler(ISessionIndex index, IReportCoordinator reports)
+public sealed class GetSessionQueryHandler(ISessionIndex index, IReportCoordinator reports, ITerminalLauncher launcher)
     : IQueryHandler<GetSessionQuery, SessionDetailDto>
 {
     public async ValueTask<SessionDetailDto> Handle(GetSessionQuery query, CancellationToken cancellationToken)
     {
         var session = await index.FindAsync(query.Id, cancellationToken)
             ?? throw new NotFoundException($"Session {query.Id} was not found.");
-        return session.ToDetailDto(reports.LatestStatus(session.Id));
+        var canContinue = !string.IsNullOrWhiteSpace(session.Cwd) && launcher.FolderExists(session.Cwd);
+        return session.ToDetailDto(reports.LatestStatus(session.Id), canContinue);
     }
 }
 

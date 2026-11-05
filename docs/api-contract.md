@@ -85,6 +85,16 @@ ReportRun:
 
 Storage: `%LOCALAPPDATA%\SessionInsights\reports\<sessionId>\v<version>.md` and `v<version>.json` (the ReportRun).
 
+### Continue in CLI
+- `SessionDetail.canContinue` (bool): the session's working folder still exists.
+- `POST /api/v1/sessions/{id}/continue` body `{ "force": false }` → `204`. Opens a terminal in the session's folder and runs `copilot --resume=<id>` or `claude --resume <id>`. The folder and CLI come from the server, never the client.
+  - `404` unknown session; `400` id is not a GUID.
+  - `409` a report run is active for the session (never forceable).
+  - `409` with ProblemDetails extension `"code": "session_active"` when the session had activity in the last 5 minutes; resend with `force: true` to proceed.
+  - `422` the working folder no longer exists, or the terminal cannot be started.
+- `GET /api/v1/settings` → `200 { "terminal": "wt-pwsh", "terminals": [{ "id":"", "label":"", "available":true }] }`.
+- `PUT /api/v1/settings` body `{ "terminal": "<id>" }` → `200` same shape. `400` for an id outside the fixed set: `wt-pwsh`, `wt-powershell`, `wt-cmd`, `pwsh`, `powershell`, `cmd`. Stored in `%LOCALAPPDATA%\SessionInsights\settings.json`. A stored choice that is unavailable falls back to `wt-pwsh` at launch time.
+
 ## Ownership
 - Backend agent owns: `apps/backend/**`, `Directory.*.props`, solution file, `docs/adr/**`, `scripts/**`, `.editorconfig`.
 - Frontend agent owns: `apps/frontend/**`, `pnpm-workspace.yaml`, root `package.json` if needed.

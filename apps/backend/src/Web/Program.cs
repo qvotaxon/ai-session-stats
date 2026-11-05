@@ -73,6 +73,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapDefaultEndpoints();
+app.MapGet("/version", () => new
+{
+    version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+});
 app.MapControllers();
 
 // SPA fallback (never for /api): unknown GET routes get index.html so client-side routing works.

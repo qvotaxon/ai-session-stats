@@ -21,6 +21,11 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
 }
 
+# Stopping the task does not always end the powershell child, which would leave a second tray icon behind.
+Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
+    Where-Object { $_.CommandLine -like '*SessionInsights*tray.ps1*' } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }
+
 $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $psArgs = "-NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$target`" -Port $Port"
 $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\conhost.exe" -Argument "--headless powershell.exe $psArgs" -WorkingDirectory $InstallPath

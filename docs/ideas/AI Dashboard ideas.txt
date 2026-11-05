@@ -1,0 +1,4 @@
+AI Dashboard ideas:
+
+- archive chats
+- continue chat (open cli) from site

@@ -19,7 +19,7 @@ public sealed class SessionsController(IMediator mediator) : ControllerBase
         [FromQuery] int pageSize = 25,
         [FromQuery] string? source = null,
         [FromQuery] string? search = null,
-        [FromQuery] string sort = "startedAt",
+        [FromQuery] string sort = "lastActivityAt",
         [FromQuery] string direction = "desc",
         CancellationToken cancellationToken = default) =>
         Ok(await mediator.Send(new ListSessionsQuery(page, pageSize, source, search, sort, direction), cancellationToken));

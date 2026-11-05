@@ -21,7 +21,7 @@ internal sealed class CopilotSessionReader(
     private static readonly HashSet<string> WantedTypes =
     [
         "session.start", "session.shutdown", "user.message", "assistant.turn_start", "tool.execution_start", "tool.execution_complete",
-        "hook.start", "hook.end", "subagent.started", "skill.invoked", "skill.invoked_ref", "session.usage_record", "session.usage_checkpoint",
+        "hook.start", "hook.end", "subagent.started", "skill.invoked", "skill.invoked_ref", "session.usage_record", "session.usage_checkpoint", "session.compaction_complete",
     ];
 
     private static readonly TimeSpan ActiveWindow = TimeSpan.FromMinutes(5);
@@ -94,6 +94,8 @@ internal sealed class CopilotSessionReader(
         long added = 0, removed = 0, files = 0;
         string? firstUserMessage = null;
         string? firstHumanMessage = null;
+        string? recap = null;
+        DateTimeOffset? recapAt = null;
         DateTimeOffset? sessionStart = null;
 
         using var stream = fs.File.OpenRead(eventsPath);
@@ -126,6 +128,15 @@ internal sealed class CopilotSessionReader(
                             inWindow = false;
                             firstUserMessage ??= content;
                             acc.UserTurns++;
+                        }
+
+                        break;
+
+                    case "session.compaction_complete":
+                        if (OverviewOf(data.Str("summaryContent")) is { } overview)
+                        {
+                            recap = overview;
+                            recapAt = at;
                         }
 
                         break;
@@ -287,9 +298,12 @@ internal sealed class CopilotSessionReader(
             Id = group.SessionId,
             Source = SessionSource.Copilot,
             Title = title,
+            Recap = Session.TruncateRecap(recap),
+            RecapAt = recap is null ? null : recapAt,
             Project = LeafOf(workspace.Cwd),
             Cwd = workspace.Cwd,
             StartedAt = started,
+            LastActivityAt = acc.Last is { } lastSeen && lastSeen > started ? lastSeen : started,
             EndedAt = ended,
             DurationSeconds = duration,
             Models = [.. models.OrderBy(m => m, StringComparer.Ordinal)],
@@ -315,6 +329,19 @@ internal sealed class CopilotSessionReader(
             Notes = notes,
             LooksLikeReportFork = string.Equals(firstHumanMessage, ReportConstants.Prompt, StringComparison.OrdinalIgnoreCase),
         };
+    }
+
+    private static string? OverviewOf(string? summary)
+    {
+        const string open = "<overview>", close = "</overview>";
+        if (summary is null)
+        {
+            return null;
+        }
+
+        var start = summary.IndexOf(open, StringComparison.Ordinal);
+        var end = summary.IndexOf(close, StringComparison.Ordinal);
+        return start >= 0 && end > start ? summary[(start + open.Length)..end].Trim() : null;
     }
 
     private static bool WantsLine(string line)

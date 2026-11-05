@@ -21,6 +21,8 @@ export const makeSummary = (overrides: Partial<SessionSummary> = {}): SessionSum
 
 export const makeDetail = (overrides: Partial<SessionDetail> = {}): SessionDetail => ({
   ...makeSummary(),
+  recap: null,
+  recapAt: null,
   tokens: {
     input: 600_000,
     output: 100_000,

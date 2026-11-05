@@ -23,7 +23,7 @@ export const SessionCardList = ({ sessions }: { sessions: SessionSummary[] }) =>
               <SourceBadge source={session.source} />
             </div>
             <div className="text-xs text-muted-foreground">
-              {session.project ?? "No project"} · <StartedAt iso={session.startedAt} />
+              {session.project ?? "No project"} · <StartedAt iso={session.lastActivityAt ?? session.startedAt} />
             </div>
             <dl className="grid grid-cols-3 gap-3">
               <Stat label="Duration">

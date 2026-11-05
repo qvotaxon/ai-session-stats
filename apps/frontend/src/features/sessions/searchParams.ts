@@ -13,7 +13,7 @@ export const sessionsSearchSchema = z.object({
   source: z.enum(["all", "copilot", "claude"]).catch("all"),
   // TanStack Router JSON-parses search values, so "123" arrives as a number.
   search: z.union([z.string(), z.number()]).transform(String).catch(""),
-  sort: sortFieldSchema.catch("startedAt"),
+  sort: sortFieldSchema.catch("lastActivityAt"),
   direction: z.enum(["asc", "desc"]).catch("desc"),
 });
 
@@ -24,6 +24,6 @@ export const DEFAULT_SESSIONS_SEARCH: SessionsSearch = {
   pageSize: 25,
   source: "all",
   search: "",
-  sort: "startedAt",
+  sort: "lastActivityAt",
   direction: "desc",
 };

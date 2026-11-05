@@ -77,14 +77,15 @@ internal sealed class ClaudeSessionReader(
         }
     }
 
-    private Session ParseCore(SessionFileGroup group, DateTimeOffset now)
+    private Session? ParseCore(SessionFileGroup group, DateTimeOffset now)
     {
         var acc = new SessionAccumulator();
         var messages = new Dictionary<string, (string Model, TokenUsage Tokens, DateTimeOffset? At, bool Main)>(StringComparer.Ordinal);
         var toolUses = new Dictionary<string, (string Name, DateTimeOffset? At)>(StringComparer.Ordinal);
         var seenResults = new HashSet<string>(StringComparer.Ordinal);
 
-        string? cwd = null, aiTitle = null, firstHuman = null, firstTitleSource = null, lastHuman = null, lastHumanEntrypoint = null;
+        string? cwd = null, aiTitle = null, customTitle = null, recap = null, firstHuman = null, firstTitleSource = null, lastHuman = null, lastHumanEntrypoint = null;
+        DateTimeOffset? recapAt = null;
         long apiDuration = 0;
         var humanTurns = 0;
 
@@ -144,12 +145,31 @@ internal sealed class ClaudeSessionReader(
                             aiTitle = root.Str("aiTitle") ?? aiTitle;
                             break;
 
+                        case "custom-title" when isMainFile:
+                            customTitle = root.Str("customTitle") ?? customTitle;
+                            break;
+
+                        case "system" when root.Str("subtype") == "away_summary" && isMainFile:
+                            if (!string.IsNullOrWhiteSpace(root.Str("content")))
+                            {
+                                recap = root.Str("content");
+                                recapAt = at;
+                            }
+
+                            break;
+
                         case "cost-state" when isMainFile:
                             apiDuration = root.Num("totalAPIDuration");
                             break;
                     }
                 }
             }
+        }
+
+        // Claude Code leaves title-only stub files (no turns) next to resumed sessions; they are not real sessions.
+        if (humanTurns == 0 && messages.Count == 0 && acc.First is null)
+        {
+            return null;
         }
 
         var subagentFiles = group.Files.Count - 1;
@@ -180,10 +200,13 @@ internal sealed class ClaudeSessionReader(
         {
             Id = group.SessionId,
             Source = SessionSource.Claude,
-            Title = Session.TruncateTitle(string.IsNullOrWhiteSpace(aiTitle) ? firstTitleSource : aiTitle),
+            Title = Session.TruncateTitle(FirstNonBlank(customTitle, aiTitle, firstTitleSource)),
+            Recap = Session.TruncateRecap(recap),
+            RecapAt = recap is null ? null : recapAt,
             Project = CopilotSessionReader.LeafOf(cwd),
             Cwd = cwd,
             StartedAt = started,
+            LastActivityAt = acc.Last is { } lastSeen && lastSeen > started ? lastSeen : started,
             EndedAt = ended,
             DurationSeconds = Math.Max(0, (long)(effectiveEnd - started).TotalSeconds),
             Models = [.. byModel.Entries.Select(e => e.Model).OrderBy(m => m, StringComparer.Ordinal)],
@@ -388,6 +411,8 @@ internal sealed class ClaudeSessionReader(
                 break;
         }
     }
+
+    private static string? FirstNonBlank(params string?[] values) => values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
     private static bool WantsLine(string line)
     {

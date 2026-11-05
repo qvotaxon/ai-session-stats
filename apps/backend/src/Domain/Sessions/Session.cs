@@ -15,10 +15,15 @@ public sealed class Session
     public string Title { get; init; } = string.Empty;
     public string? Project { get; init; }
 
+    /// <summary>Latest AI-written recap of the session (Claude /recap, Copilot checkpoint overview), when the CLI stored one.</summary>
+    public string? Recap { get; init; }
+    public DateTimeOffset? RecapAt { get; init; }
+
     /// <summary>Working directory of the session. Internal: used to run reports, never returned by the API.</summary>
     public string? Cwd { get; init; }
 
     public DateTimeOffset StartedAt { get; init; }
+    public DateTimeOffset LastActivityAt { get; init; }
     public DateTimeOffset? EndedAt { get; init; }
     public long DurationSeconds { get; init; }
 
@@ -87,6 +92,19 @@ public sealed class Session
 
         text = Spaces.Replace(AnyTag.Replace(text, " "), " ").Trim();
         return text.Length == 0 ? null : text;
+    }
+
+    public const int MaxRecapLength = 2000;
+
+    public static string? TruncateRecap(string? recap)
+    {
+        var clean = recap?.Trim();
+        if (string.IsNullOrEmpty(clean))
+        {
+            return null;
+        }
+
+        return clean.Length <= MaxRecapLength ? clean : clean[..MaxRecapLength];
     }
 
     public static string TruncateTitle(string? title)

@@ -17,12 +17,13 @@ public sealed class SessionQueryTests
     private readonly ISessionIndex index = Substitute.For<ISessionIndex>();
     private readonly IReportCoordinator reports = Substitute.For<IReportCoordinator>();
 
-    private static Session Make(SessionSource source, string title, int minute, long tokens, int tools = 0) => new()
+    private static Session Make(SessionSource source, string title, int minute, long tokens, int tools = 0, int lastActiveDays = 0) => new()
     {
         Id = Guid.NewGuid().ToString("D"),
         Source = source,
         Title = title,
         StartedAt = new DateTimeOffset(2026, 1, 10, 10, minute, 0, TimeSpan.Zero),
+        LastActivityAt = new DateTimeOffset(2026, 1, 10, 10, minute, 0, TimeSpan.Zero).AddDays(lastActiveDays),
         Tokens = new TokenUsage(tokens, 0, 0, 0, 0),
         ToolCallsSucceeded = tools,
     };
@@ -34,13 +35,15 @@ public sealed class SessionQueryTests
     }
 
     [Fact]
-    public async Task Default_sort_is_newest_first()
+    public async Task Default_sort_is_most_recently_active_first()
     {
-        var handler = Handler(Make(SessionSource.Copilot, "old", 1, 1), Make(SessionSource.Claude, "new", 9, 1));
+        var resumed = Make(SessionSource.Copilot, "old but resumed", 1, 1, lastActiveDays: 3);
+        var newer = Make(SessionSource.Claude, "newer start", 9, 1);
+        var handler = Handler(newer, resumed);
 
         var page = await handler.Handle(new ListSessionsQuery(), TestContext.Current.CancellationToken);
 
-        page.Items.Select(i => i.Title).ShouldBe(["new", "old"]);
+        page.Items.Select(i => i.Title).ShouldBe(["old but resumed", "newer start"]);
     }
 
     [Fact]

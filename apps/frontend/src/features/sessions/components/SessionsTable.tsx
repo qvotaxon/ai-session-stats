@@ -62,6 +62,11 @@ export const SessionsTable = ({ sessions, sort, direction, onSort }: SessionsTab
         header: "Project",
         cell: (c) => <span className="block max-w-[8rem] truncate">{c.getValue() ?? "–"}</span>,
       }),
+      columnHelper.accessor((row) => row.lastActivityAt ?? row.startedAt, {
+        id: "lastActivityAt",
+        header: header("Last active", "lastActivityAt"),
+        cell: (c) => <StartedAt iso={c.getValue()} />,
+      }),
       columnHelper.accessor("startedAt", {
         header: header("Started", "startedAt"),
         cell: (c) => <StartedAt iso={c.getValue()} />,

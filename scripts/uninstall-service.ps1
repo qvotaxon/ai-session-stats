@@ -6,6 +6,7 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string] $InstallPath = (Join-Path $env:ProgramFiles 'SessionInsights'),
+    [string] $ServiceUser = 'SessionInsightsSvc',
     [switch] $RemoveFiles
 )
 
@@ -25,4 +26,9 @@ if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
 if ($RemoveFiles -and (Test-Path $InstallPath) -and $PSCmdlet.ShouldProcess($InstallPath, 'Delete install folder')) {
     Remove-Item -Recurse -Force $InstallPath
     Write-Host "Removed $InstallPath"
+}
+
+if ($RemoveFiles -and (Get-LocalUser -Name $ServiceUser -ErrorAction SilentlyContinue) -and $PSCmdlet.ShouldProcess($ServiceUser, 'Delete local service account')) {
+    Remove-LocalUser -Name $ServiceUser
+    Write-Host "Removed local account $ServiceUser (folder permissions granted to it become orphaned entries and are harmless)."
 }

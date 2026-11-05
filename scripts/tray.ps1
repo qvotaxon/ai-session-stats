@@ -58,18 +58,41 @@ $quit.add_Click({
 
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 15000
-$check = {
+
+# The probe runs in a background runspace so a stalled server never blocks the tray's UI thread.
+$probeScript = {
+    param($port)
     try {
-        $r = Invoke-WebRequest "http://127.0.0.1:$Port/health" -UseBasicParsing -TimeoutSec 3
-        $up = $r.StatusCode -eq 200
-    } catch { $up = $false }
+        (Invoke-WebRequest "http://127.0.0.1:$port/health" -UseBasicParsing -TimeoutSec 3).StatusCode -eq 200
+    } catch { $false }
+}
+$script:probe = $null
+$script:probeHandle = $null
+
+$startProbe = {
+    if ($script:probe) { return }
+    $script:probe = [powershell]::Create().AddScript($probeScript).AddArgument($Port)
+    $script:probeHandle = $script:probe.BeginInvoke()
+}
+
+$pollTimer = New-Object System.Windows.Forms.Timer
+$pollTimer.Interval = 250
+$pollTimer.add_Tick({
+    if (-not $script:probe -or -not $script:probeHandle.IsCompleted) { return }
+    try { $up = [bool]($script:probe.EndInvoke($script:probeHandle) | Select-Object -First 1) } catch { $up = $false }
+    $script:probe.Dispose()
+    $script:probe = $null
     $notify.Icon = if ($up) { $upIcon } else { $downIcon }
     $notify.Text = if ($up) { 'Session Insights: running' } else { 'Session Insights: not running' }
-}
-$timer.add_Tick($check)
+})
+
+$timer.add_Tick($startProbe)
 $timer.Start()
-& $check
+$pollTimer.Start()
+& $startProbe
 
 [System.Windows.Forms.Application]::Run()
 $timer.Dispose()
+$pollTimer.Dispose()
+if ($script:probe) { $script:probe.Dispose() }
 $notify.Dispose()

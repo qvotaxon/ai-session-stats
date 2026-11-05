@@ -341,7 +341,13 @@ internal sealed class CopilotSessionReader(
 
         var start = summary.IndexOf(open, StringComparison.Ordinal);
         var end = summary.IndexOf(close, StringComparison.Ordinal);
-        return start >= 0 && end > start ? summary[(start + open.Length)..end].Trim() : null;
+        if (start < 0 || end <= start)
+        {
+            return null;
+        }
+
+        var text = summary[(start + open.Length)..end].Trim();
+        return text.Length == 0 ? null : text;
     }
 
     private static bool WantsLine(string line)

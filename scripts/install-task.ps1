@@ -20,6 +20,12 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
     throw "Task '$taskName' already exists. Run scripts\uninstall-task.ps1 first."
 }
 
+# A leftover Windows service from an earlier install would keep the port and keep serving the old build.
+$legacy = Get-Service -Name $taskName -ErrorAction SilentlyContinue
+if ($legacy) {
+    throw "A legacy Windows service named '$taskName' exists (status: $($legacy.Status)). From an elevated prompt run: sc.exe stop $taskName; sc.exe delete $taskName. Then run this script again."
+}
+
 Write-Host "Publishing to $InstallPath ..."
 dotnet publish $project --configuration Release --output $InstallPath --no-self-contained
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }

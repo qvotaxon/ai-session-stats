@@ -19,7 +19,8 @@ There is no app registration to point at, the tool must work offline, and the da
 - The token is injected into the served `index.html` as `<meta name="si-token">`; the SPA sends it on every call.
   A foreign web page cannot read it (same-origin policy plus the Host/Origin checks).
 - `/health` is anonymous and returns no data.
-- The API exposes metrics only: never prompt or response text, tool arguments or tool output.
+- The API exposes metrics only: never prompt or response text, tool arguments or tool output. The single, bounded exception is
+  the session `recap` on the detail endpoint: a CLI-written summary (max 2000 chars) that the user's own tools already stored.
 
 ## Consequences
 

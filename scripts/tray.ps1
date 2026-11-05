@@ -48,8 +48,14 @@ $openAction = { Start-Process $url }
 $open.add_Click($openAction)
 $notify.add_Click({ if ($_.Button -eq 'Left') { Start-Process $url } })
 $restart.add_Click({
+    $notify.Icon = $downIcon
+    $notify.Text = 'Session Insights: restarting'
+    $script:graceUntil = (Get-Date).AddSeconds(4)
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    # Probe quickly until the server answers again; the tick handler restores the normal interval.
+    $timer.Interval = 2000
+    & $startProbe
 })
 $quit.add_Click({
     $notify.Visible = $false
@@ -68,6 +74,7 @@ $probeScript = {
 }
 $script:probe = $null
 $script:probeHandle = $null
+$script:graceUntil = [DateTime]::MinValue
 
 $startProbe = {
     if ($script:probe) { return }
@@ -82,6 +89,8 @@ $pollTimer.add_Tick({
     try { $up = [bool]($script:probe.EndInvoke($script:probeHandle) | Select-Object -First 1) } catch { $up = $false }
     $script:probe.Dispose()
     $script:probe = $null
+    if ((Get-Date) -lt $script:graceUntil) { return }
+    if ($up) { $timer.Interval = 15000 }
     $notify.Icon = if ($up) { $upIcon } else { $downIcon }
     $notify.Text = if ($up) { 'Session Insights: running' } else { 'Session Insights: not running' }
 })

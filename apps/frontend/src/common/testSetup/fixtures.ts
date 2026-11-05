@@ -64,6 +64,7 @@ export const makeDetail = (overrides: Partial<SessionDetail> = {}): SessionDetai
   codeChanges: { linesAdded: 120, linesRemoved: 30, filesModified: 4 },
   timeline: [{ bucketStart: "2026-11-04T08:00:00Z", toolCalls: 2, hooks: 1, guards: 0, tokens: 1000 }],
   notes: [],
+  canContinue: true,
   ...overrides,
 });
 

@@ -6,6 +6,7 @@ using SessionInsights.Application.Common;
 using SessionInsights.Infrastructure.Reports;
 using SessionInsights.Infrastructure.Security;
 using SessionInsights.Infrastructure.Sessions;
+using SessionInsights.Infrastructure.Terminals;
 
 namespace SessionInsights.Infrastructure;
 
@@ -31,6 +32,8 @@ public static class DependencyInjection
         services.AddHostedService<ReportWorker>();
 
         services.AddSingleton<IApiTokenProvider, ApiTokenProvider>();
+        services.AddSingleton<ITerminalSettings, TerminalSettingsStore>();
+        services.AddSingleton<ITerminalLauncher, TerminalLauncher>();
         return services;
     }
 }

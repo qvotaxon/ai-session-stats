@@ -80,7 +80,11 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         }
         catch (ConflictException ex)
         {
-            await ProblemWriter.WriteAsync(context, StatusCodes.Status409Conflict, "Conflict", ex.Message);
+            await ProblemWriter.WriteAsync(context, StatusCodes.Status409Conflict, "Conflict", ex.Message, ex.Code);
+        }
+        catch (UnprocessableException ex)
+        {
+            await ProblemWriter.WriteAsync(context, StatusCodes.Status422UnprocessableEntity, "Unprocessable Entity", ex.Message);
         }
         catch (Exception ex)
         {
@@ -92,7 +96,7 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
 
 internal static class ProblemWriter
 {
-    public static Task WriteAsync(HttpContext context, int status, string title, string detail)
+    public static Task WriteAsync(HttpContext context, int status, string title, string detail, string? code = null)
     {
         if (context.Response.HasStarted)
         {
@@ -100,8 +104,14 @@ internal static class ProblemWriter
         }
 
         context.Response.StatusCode = status;
+        var problem = new ProblemDetails { Status = status, Title = title, Detail = detail, Instance = context.Request.Path };
+        if (code is not null)
+        {
+            problem.Extensions["code"] = code;
+        }
+
         return context.Response.WriteAsJsonAsync(
-            new ProblemDetails { Status = status, Title = title, Detail = detail, Instance = context.Request.Path },
+            problem,
             options: null,
             contentType: "application/problem+json");
     }

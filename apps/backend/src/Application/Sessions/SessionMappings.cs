@@ -35,7 +35,7 @@ public static class SessionMappings
         s.SubagentTotal,
         latestReport?.ToWire());
 
-    public static SessionDetailDto ToDetailDto(this Session s, ReportStatus? latestReport)
+    public static SessionDetailDto ToDetailDto(this Session s, ReportStatus? latestReport, bool canContinue = false)
     {
         var summary = s.ToSummaryDto(latestReport);
         return new SessionDetailDto(
@@ -74,6 +74,7 @@ public static class SessionMappings
             s.Cost is null ? null : new CostDto(s.Cost.PremiumRequests, s.Cost.NanoAiu),
             s.CodeChanges is null ? null : new CodeChangesDto(s.CodeChanges.LinesAdded, s.CodeChanges.LinesRemoved, s.CodeChanges.FilesModified),
             [.. s.Timeline.Select(b => new TimelineBucketDto(b.BucketStart, b.ToolCalls, b.Hooks, b.Guards, b.Tokens))],
-            s.Notes);
+            s.Notes,
+            canContinue);
     }
 }

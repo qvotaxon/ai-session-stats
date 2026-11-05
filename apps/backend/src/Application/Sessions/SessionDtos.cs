@@ -52,7 +52,8 @@ public sealed record SessionDetailDto(
     CostDto? Cost,
     CodeChangesDto? CodeChanges,
     IReadOnlyList<TimelineBucketDto> Timeline,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    bool CanContinue);
 
 public sealed record TokensDto(long Input, long Output, long CacheRead, long CacheWrite, long Reasoning, long Total);
 

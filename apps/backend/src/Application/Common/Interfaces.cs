@@ -42,6 +42,25 @@ public interface IReportCoordinator
     ReportRun Cancel(string sessionId, string runId);
 }
 
+/// <summary>Persisted user preference for which terminal "Continue in CLI" opens. Always a supported terminal id.</summary>
+public interface ITerminalSettings
+{
+    string Terminal { get; }
+
+    void SetTerminal(string id);
+}
+
+public interface ITerminalLauncher
+{
+    /// <summary>Ids of the terminal options that can be launched on this machine.</summary>
+    IReadOnlyList<string> Available();
+
+    bool FolderExists(string path);
+
+    /// <summary>Opens a terminal in the working directory running the CLI with the given arguments. Throws <see cref="UnprocessableException"/> when it cannot.</summary>
+    void Launch(string terminalId, string workingDirectory, string cli, IReadOnlyList<string> cliArguments);
+}
+
 public interface IValidatable
 {
     /// <summary>Returns an error message, or null when the request is valid.</summary>

@@ -1,3 +1,4 @@
+using System;
 using System.IO.Abstractions.TestingHelpers;
 using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,6 +21,66 @@ public sealed class CopilotSessionReaderTests
         WriteLines(fs, $@"{CopilotRoot}\{id}\events.jsonl", lines);
         fs.AddFile($@"{CopilotRoot}\{id}\workspace.yaml", new MockFileData("id: x\ncwd: C:\\work\\demo\nname: Demo session\ncreated_at: 2026-01-10T10:00:00Z\n"));
         return Reader().Discover().Single(g => g.SessionId == id);
+    }
+
+    [Fact]
+    public void Parse_uses_the_overview_of_the_latest_compaction_as_recap()
+    {
+        var id = NewId();
+        var group = Write(
+            id,
+            Json("session.start", Ts(0), "{}"),
+            Json("user.message", Ts(1), """{"content":"hello"}"""),
+            Json("session.compaction_complete", Ts(2), """{"summaryContent":"<overview>first</overview>"}"""),
+            Json("session.compaction_complete", Ts(5), """{"summaryContent":"<history>x</history><overview>\n second \n</overview>"}"""));
+
+        var session = Reader().Parse(group, Now)!;
+
+        session.Recap.ShouldBe("second");
+        session.RecapAt.ShouldBe(DateTimeOffset.Parse(Ts(5)));
+    }
+
+    [Fact]
+    public void Parse_ignores_compactions_without_an_overview_section()
+    {
+        var id = NewId();
+        var group = Write(
+            id,
+            Json("session.start", Ts(0), "{}"),
+            Json("user.message", Ts(1), """{"content":"hello"}"""),
+            Json("session.compaction_complete", Ts(2), """{"summaryContent":"<overview>kept</overview>"}"""),
+            Json("session.compaction_complete", Ts(3), """{"summaryContent":"<history>no overview</history>"}"""),
+            Json("session.compaction_complete", Ts(4), """{"summaryContent":"<overview>   </overview>"}"""),
+            Json("session.compaction_complete", Ts(5), "{}"));
+
+        var session = Reader().Parse(group, Now)!;
+
+        session.Recap.ShouldBe("kept");
+        session.RecapAt.ShouldBe(DateTimeOffset.Parse(Ts(2)));
+    }
+
+    [Fact]
+    public void Parse_has_no_recap_when_no_compaction_happened()
+    {
+        var group = Write(NewId(), Json("session.start", Ts(0), "{}"), Json("user.message", Ts(1), """{"content":"hello"}"""));
+
+        var session = Reader().Parse(group, Now)!;
+
+        session.Recap.ShouldBeNull();
+        session.RecapAt.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Parse_truncates_an_overlong_recap()
+    {
+        var overview = new string('x', 5000);
+        var group = Write(
+            NewId(),
+            Json("session.start", Ts(0), "{}"),
+            Json("user.message", Ts(1), """{"content":"hello"}"""),
+            Json("session.compaction_complete", Ts(2), $$"""{"summaryContent":"<overview>{{overview}}</overview>"}"""));
+
+        Reader().Parse(group, Now)!.Recap!.Length.ShouldBe(SessionInsights.Domain.Sessions.Session.MaxRecapLength);
     }
 
     [Fact]

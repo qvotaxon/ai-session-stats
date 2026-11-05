@@ -37,6 +37,35 @@ describe("SessionDetailPage", () => {
     expect(screen.getByRole("img", { name: /^Token breakdown\./ })).toBeInTheDocument();
   });
 
+  it("shows the recap banner with its timestamp", async () => {
+    get.mockResolvedValue(makeDetail({ recap: "We are fixing the scheduler.", recapAt: "2026-01-10T10:05:00Z" }));
+    renderApp("/sessions/s-1");
+
+    await screen.findByRole("heading", { name: "Fix the scheduler" });
+    const banner = screen.getByRole("alert");
+    expect(banner).toHaveTextContent("Recap");
+    expect(banner).toHaveTextContent("We are fixing the scheduler.");
+    expect(banner).toHaveTextContent("2026");
+  });
+
+  it("shows the recap banner without a timestamp when none is known", async () => {
+    get.mockResolvedValue(makeDetail({ recap: "We are fixing the scheduler.", recapAt: null }));
+    renderApp("/sessions/s-1");
+
+    await screen.findByRole("heading", { name: "Fix the scheduler" });
+    const banner = screen.getByRole("alert");
+    expect(banner).toHaveTextContent("We are fixing the scheduler.");
+    expect(banner).not.toHaveTextContent("2026");
+  });
+
+  it("hides the recap banner when there is no recap", async () => {
+    get.mockResolvedValue(makeDetail({ recap: null, recapAt: null }));
+    renderApp("/sessions/s-1");
+
+    await screen.findByRole("heading", { name: "Fix the scheduler" });
+    expect(screen.queryByText("Recap")).not.toBeInTheDocument();
+  });
+
   it("shows 'Not recorded' for API time when requests exist but no duration was recorded", async () => {
     get.mockResolvedValue(makeDetail({ api: { requestCount: 5, totalApiDurationMs: 0 } }));
     renderApp("/sessions/s-1");

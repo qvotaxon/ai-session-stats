@@ -215,7 +215,7 @@ internal sealed class ReportCoordinator : IReportCoordinator
 
             var cliName = run.Cli == SessionSource.Claude ? options.Value.ClaudeCliPath : options.Value.CopilotCliPath;
             var exe = locator.Locate(cliName) ?? throw new ReportFailure($"CLI '{cliName}' was not found.");
-            var result = await processes.RunAsync(new ProcessSpec(exe, BuildArguments(run), session.Cwd), linked.Token);
+            var result = await processes.RunAsync(new ProcessSpec(exe, BuildArguments(run), session.Cwd, BuildEnvironment(run)), linked.Token);
 
             lock (gate)
             {
@@ -287,6 +287,14 @@ internal sealed class ReportCoordinator : IReportCoordinator
     internal static IReadOnlyList<string> BuildArguments(ReportRun run) => run.Cli == SessionSource.Claude
         ? ["-p", ReportConstants.Prompt, "--resume", run.SessionId, "--fork-session", "--output-format", "json"]
         : ["-p", ReportConstants.Prompt, $"--resume={run.SessionId}", "-s"];
+
+    private Dictionary<string, string>? BuildEnvironment(ReportRun run)
+    {
+        var (name, dir) = run.Cli == SessionSource.Claude
+            ? ("CLAUDE_CONFIG_DIR", options.Value.ClaudeConfigDir)
+            : ("COPILOT_HOME", options.Value.CopilotHome);
+        return string.IsNullOrWhiteSpace(dir) ? null : new Dictionary<string, string> { [name] = dir };
+    }
 
     private static (string? Text, string? ForkId, bool IsError) ParseClaudeOutput(string stdout)
     {

@@ -72,6 +72,34 @@ public sealed class ClaudeSessionReaderTests
     }
 
     [Fact]
+    public void Parse_skips_title_only_stub_files()
+    {
+        var id = NewId();
+        var group = Write(id, """{"type":"ai-title","aiTitle":"Stub"}""", """{"type":"agent-name","agentName":"Stub"}""");
+
+        Reader().Parse(group, Now).ShouldBeNull();
+    }
+
+    [Fact]
+    public void Parse_prefers_custom_title_and_captures_latest_recap()
+    {
+        var id = NewId();
+        var group = Write(
+            id,
+            User(0, "work"),
+            Assistant(1, "m1"),
+            """{"type":"ai-title","aiTitle":"Generated"}""",
+            """{"type":"custom-title","customTitle":"My Name"}""",
+            """{"type":"system","subtype":"away_summary","content":"first recap","timestamp":"2026-01-01T00:00:05Z"}""",
+            """{"type":"system","subtype":"away_summary","content":"second recap","timestamp":"2026-01-01T00:00:06Z"}""");
+
+        var session = Reader().Parse(group, Now)!;
+
+        session.Title.ShouldBe("My Name");
+        session.Recap.ShouldBe("second recap");
+    }
+
+    [Fact]
     public void Parse_flags_a_report_fork_by_first_human_message()
     {
         var id = NewId();

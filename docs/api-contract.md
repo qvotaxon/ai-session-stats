@@ -8,7 +8,7 @@ Errors are RFC 9457 ProblemDetails. The service listens on `http://127.0.0.1:518
 - Bind to loopback only. Reject (403) any request whose `Host` is not `localhost`/`127.0.0.1`/`[::1]` (with the port), or whose `Origin` (if present) is not one of those hosts.
 - Every `/api/**` request needs header `X-Session-Insights-Token: <token>`; missing or wrong is 401. `/health` is the only anonymous endpoint (and returns no session data).
 - Token: random, generated on first run, stored in `%LOCALAPPDATA%\SessionInsights\token` (user-only ACL). The server injects it into the served `index.html` as `<meta name="si-token" content="...">`. In Vite dev, the proxy reads the same file and adds the header.
-- No raw prompt, response, tool arguments or tool output is ever returned. Only metrics, names and counts. The session `title` is truncated to 120 chars.
+- No raw prompt, response, tool arguments or tool output is ever returned. Only metrics, names and counts. The session `title` is truncated to 120 chars. The one exception is `recap` (detail only): the CLI's own summary of the session (Claude `away_summary`, Copilot compaction `<overview>`), truncated to 2000 chars, `null` when the CLI never wrote one.
 
 ## Report forks must never appear as sessions
 
@@ -27,7 +27,7 @@ Copilot runs resume in place (no new session), and the report turn is excluded f
 `200 {"status":"Healthy"}`
 
 ### GET /api/v1/sessions
-Query: `page` (default 1), `pageSize` (default 25, max 100), `source` (`copilot`|`claude`, optional), `search` (matches title/project/id, optional), `sort` (`startedAt`|`totalTokens`|`toolCallCount`|`durationSeconds`, default `startedAt`), `direction` (`asc`|`desc`, default `desc`).
+Query: `page` (default 1), `pageSize` (default 25, max 100), `source` (`copilot`|`claude`, optional), `search` (matches title/project/id, optional), `sort` (`lastActivityAt`|`startedAt`|`totalTokens`|`toolCallCount`|`durationSeconds`, default `lastActivityAt`, so a continued old session moves to the top), `direction` (`asc`|`desc`, default `desc`).
 
 ```json
 { "items": [SessionSummary], "page": 1, "pageSize": 25, "totalCount": 137, "totalPages": 6 }
@@ -37,7 +37,7 @@ SessionSummary:
 ```json
 {
   "id": "string", "source": "copilot|claude", "title": "string", "project": "string|null",
-  "startedAt": "iso", "endedAt": "iso|null", "durationSeconds": 0,
+  "startedAt": "iso", "lastActivityAt": "iso", "endedAt": "iso|null", "durationSeconds": 0,
   "models": ["string"], "totalTokens": 0, "toolCallCount": 0, "hookCount": 0,
   "guardCount": 0, "subagentCount": 0, "latestReportStatus": "queued|running|succeeded|failed|cancelled|null"
 }
@@ -47,6 +47,7 @@ SessionSummary:
 404 if unknown or excluded. SessionDetail = SessionSummary plus:
 ```json
 {
+  "recap": "string|null", "recapAt": "iso|null",
   "tokens": { "input":0,"output":0,"cacheRead":0,"cacheWrite":0,"reasoning":0,"total":0 },
   "tokensByModel": [{ "model":"","requests":0,"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"reasoning":0 }],
   "toolCalls": { "total":0,"succeeded":0,"failed":0,

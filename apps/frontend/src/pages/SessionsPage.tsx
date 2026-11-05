@@ -47,7 +47,7 @@ const SessionsPage = () => {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
-        <p className="text-sm text-muted-foreground">Your Copilot and Claude CLI sessions, newest first.</p>
+        <p className="text-sm text-muted-foreground">Your Copilot and Claude CLI sessions, most recently active first.</p>
       </div>
 
       <SessionsToolbar

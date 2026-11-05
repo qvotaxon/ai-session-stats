@@ -10,6 +10,12 @@ public sealed class SessionInsightsOptions
     public string? CopilotRoot { get; set; }
     public string? ClaudeRoot { get; set; }
     public string? DataRoot { get; set; }
+
+    /// <summary>Set CLAUDE_CONFIG_DIR for report runs, so a service account reuses another user's Claude config and login.</summary>
+    public string? ClaudeConfigDir { get; set; }
+
+    /// <summary>Set COPILOT_HOME for report runs, so a service account reuses another user's Copilot config.</summary>
+    public string? CopilotHome { get; set; }
     public TimeSpan ReportTimeout { get; set; } = TimeSpan.FromMinutes(10);
     public string CopilotCliPath { get; set; } = "copilot";
     public string ClaudeCliPath { get; set; } = "claude";

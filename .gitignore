@@ -7,3 +7,4 @@ obj/
 *.user
 .env.local
 publish/
+docs/ideas/

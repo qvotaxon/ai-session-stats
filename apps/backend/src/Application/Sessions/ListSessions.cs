@@ -14,12 +14,12 @@ public sealed record ListSessionsQuery(
     int PageSize = 25,
     string? Source = null,
     string? Search = null,
-    string Sort = "startedAt",
+    string Sort = "lastActivityAt",
     string Direction = "desc") : IQuery<PagedResult<SessionSummaryDto>>, IValidatable
 {
     public const int MaxPageSize = 100;
 
-    private static readonly string[] SortFields = ["startedAt", "totalTokens", "toolCallCount", "durationSeconds"];
+    private static readonly string[] SortFields = ["lastActivityAt", "startedAt", "totalTokens", "toolCallCount", "durationSeconds"];
 
     public string? Validate()
     {
@@ -40,7 +40,7 @@ public sealed record ListSessionsQuery(
 
         if (!SortFields.Contains(Sort, StringComparer.OrdinalIgnoreCase))
         {
-            return "sort must be one of startedAt, totalTokens, toolCallCount, durationSeconds.";
+            return "sort must be one of lastActivityAt, startedAt, totalTokens, toolCallCount, durationSeconds.";
         }
 
         if (!Direction.Equals("asc", StringComparison.OrdinalIgnoreCase) && !Direction.Equals("desc", StringComparison.OrdinalIgnoreCase))
@@ -80,7 +80,8 @@ public sealed class ListSessionsQueryHandler(ISessionIndex index, IReportCoordin
             "totaltokens" => s => s.Tokens.Total,
             "toolcallcount" => s => s.ToolCallTotal,
             "durationseconds" => s => s.DurationSeconds,
-            _ => s => s.StartedAt,
+            "startedat" => s => s.StartedAt,
+            _ => s => s.LastActivityAt,
         };
 
         var ordered = descending ? sessions.OrderByDescending(key) : sessions.OrderBy(key);

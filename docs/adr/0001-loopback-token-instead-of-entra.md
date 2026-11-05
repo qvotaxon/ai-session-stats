@@ -6,7 +6,7 @@
 ## Context
 
 MSDC doctrine defaults to Microsoft Entra ID (MSAL on the client, JWT bearer on the API) for every web application.
-Session Insights is different in kind: a single-user tool that runs as a Windows Service on the developer's own machine,
+Session Insights is different in kind: a single-user tool that runs as a Scheduled Task on the developer's own machine,
 reads files in that user's profile (`~/.copilot`, `~/.claude`) and has no tenant, no shared data and no remote users.
 There is no app registration to point at, the tool must work offline, and the data it exposes is the user's own metrics.
 
@@ -19,7 +19,8 @@ There is no app registration to point at, the tool must work offline, and the da
 - The token is injected into the served `index.html` as `<meta name="si-token">`; the SPA sends it on every call.
   A foreign web page cannot read it (same-origin policy plus the Host/Origin checks).
 - `/health` is anonymous and returns no data.
-- The API exposes metrics only: never prompt or response text, tool arguments or tool output.
+- The API exposes metrics only: never prompt or response text, tool arguments or tool output. The single, bounded exception is
+  the session `recap` on the detail endpoint: a CLI-written summary (max 2000 chars) that the user's own tools already stored.
 
 ## Consequences
 

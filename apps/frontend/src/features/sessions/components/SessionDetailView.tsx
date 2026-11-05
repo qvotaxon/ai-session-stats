@@ -1,4 +1,4 @@
-import { ArrowLeft, Info } from "lucide-react";
+import { ArrowLeft, Info, Sparkles } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
@@ -39,6 +39,16 @@ export const SessionDetailView = ({ session }: { session: SessionDetail }) => (
       </p>
       <p className="mt-1 text-xs break-all text-muted-foreground">{session.id}</p>
     </div>
+
+    {session.recap && (
+      <Alert>
+        <Sparkles className="size-4" aria-hidden />
+        <AlertTitle>
+          Recap{session.recapAt ? <span className="ml-2 text-xs font-normal text-muted-foreground">{formatDateTime(session.recapAt)}</span> : null}
+        </AlertTitle>
+        <AlertDescription className="whitespace-pre-line">{session.recap}</AlertDescription>
+      </Alert>
+    )}
 
     {session.notes.length > 0 && (
       <Alert>

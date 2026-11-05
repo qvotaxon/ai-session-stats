@@ -11,6 +11,7 @@ export const sessionSummarySchema = z.object({
   title: z.string(),
   project: z.string().nullable().default(null),
   startedAt: z.string(),
+  lastActivityAt: z.string().optional(),
   endedAt: z.string().nullable().default(null),
   durationSeconds: count,
   models: z.array(z.string()).default([]),
@@ -33,6 +34,8 @@ export const sessionPageSchema = z.object({
 const nameCount = z.object({ name: z.string(), count });
 
 export const sessionDetailSchema = sessionSummarySchema.extend({
+  recap: z.string().nullable().default(null),
+  recapAt: z.string().nullable().default(null),
   tokens: z.object({
     input: count,
     output: count,
@@ -102,7 +105,7 @@ export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionPage = z.infer<typeof sessionPageSchema>;
 export type SessionDetail = z.infer<typeof sessionDetailSchema>;
 
-export const sortFieldSchema = z.enum(["startedAt", "totalTokens", "toolCallCount", "durationSeconds"]);
+export const sortFieldSchema = z.enum(["lastActivityAt", "startedAt", "totalTokens", "toolCallCount", "durationSeconds"]);
 export type SortField = z.infer<typeof sortFieldSchema>;
 export type SortDirection = "asc" | "desc";
 

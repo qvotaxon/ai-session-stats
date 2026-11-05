@@ -32,6 +32,14 @@ internal sealed class ProcessRunner : IProcessRunner
             info.ArgumentList.Add(argument);
         }
 
+        if (spec.Environment is not null)
+        {
+            foreach (var (key, value) in spec.Environment)
+            {
+                info.Environment[key] = value;
+            }
+        }
+
         using var process = new Process { StartInfo = info };
         process.Start();
         process.StandardInput.Close();

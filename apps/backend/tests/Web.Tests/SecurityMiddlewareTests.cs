@@ -116,6 +116,17 @@ public sealed class SecurityMiddlewareTests(SecurityFixture factory) : IClassFix
     public async Task Health_is_anonymous() => (await Status(Get("/health"))).ShouldBe(HttpStatusCode.OK);
 
     [Fact]
+    public async Task Version_is_anonymous_and_returns_the_application_version()
+    {
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync("/version", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        body.ShouldContain("\"version\":\"");
+    }
+
+    [Fact]
     public async Task Api_without_token_is_unauthorized() => (await Status(Get("/api/v1/sessions"))).ShouldBe(HttpStatusCode.Unauthorized);
 
     [Fact]

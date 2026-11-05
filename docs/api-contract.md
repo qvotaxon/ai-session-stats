@@ -6,7 +6,7 @@ Errors are RFC 9457 ProblemDetails. The service listens on `http://127.0.0.1:518
 ## Security
 
 - Bind to loopback only. Reject (403) any request whose `Host` is not `localhost`/`127.0.0.1`/`[::1]` (with the port), or whose `Origin` (if present) is not one of those hosts.
-- Every `/api/**` request needs header `X-Session-Insights-Token: <token>`; missing or wrong is 401. `/health` is the only anonymous endpoint (and returns no session data).
+- Every `/api/**` request needs header `X-Session-Insights-Token: <token>`; missing or wrong is 401. `/health` and `/version` are the anonymous endpoints and return no session data.
 - Token: random, generated on first run, stored in `%LOCALAPPDATA%\SessionInsights\token` (user-only ACL). The server injects it into the served `index.html` as `<meta name="si-token" content="...">`. In Vite dev, the proxy reads the same file and adds the header.
 - No raw prompt, response, tool arguments or tool output is ever returned. Only metrics, names and counts. The session `title` is truncated to 120 chars. The one exception is `recap` (detail only): the CLI's own summary of the session (Claude `away_summary`, Copilot compaction `<overview>`), truncated to 2000 chars, `null` when the CLI never wrote one.
 
@@ -25,6 +25,9 @@ Copilot runs resume in place (no new session), and the report turn is excluded f
 
 ### GET /health
 `200 {"status":"Healthy"}`
+
+### GET /version
+`200 {"version":"1.2.3"}` (the installed application version, without a `v` prefix).
 
 ### GET /api/v1/sessions
 Query: `page` (default 1), `pageSize` (default 25, max 100), `source` (`copilot`|`claude`, optional), `search` (matches title/project/id, optional), `sort` (`lastActivityAt`|`startedAt`|`totalTokens`|`toolCallCount`|`durationSeconds`, default `lastActivityAt`, so a continued old session moves to the top), `direction` (`asc`|`desc`, default `desc`).

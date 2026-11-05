@@ -6,7 +6,7 @@
 ## Context
 
 MSDC doctrine defaults to Microsoft Entra ID (MSAL on the client, JWT bearer on the API) for every web application.
-Session Insights is different in kind: a single-user tool that runs as a Windows Service on the developer's own machine,
+Session Insights is different in kind: a single-user tool that runs as a Scheduled Task on the developer's own machine,
 reads files in that user's profile (`~/.copilot`, `~/.claude`) and has no tenant, no shared data and no remote users.
 There is no app registration to point at, the tool must work offline, and the data it exposes is the user's own metrics.
 

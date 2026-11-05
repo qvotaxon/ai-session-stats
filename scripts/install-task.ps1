@@ -2,7 +2,6 @@
 .SYNOPSIS
   Publishes Session Insights and starts it at every logon through a Scheduled Task (no admin, no password).
 .DESCRIPTION
-  Use this when a Windows Service cannot run as your account (Entra/Microsoft-account or non-domain machines).
   The task runs as the current user, so it reads %USERPROFILE%\.copilot and .claude and launches the CLIs with your login.
 #>
 [CmdletBinding()]

@@ -136,14 +136,15 @@ $updateAvailable.add_Click({
         $appPath = $PSScriptRoot
         $arguments = "-NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$tempUpdater`" -ExpectedTag `"$tag`" -InstallPath `"$appPath`" -Port $Port -UpdateTaskName `"$updateTaskName`""
         $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory ([System.IO.Path]::GetTempPath()) -ErrorAction Stop
+        $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\conhost.exe" -Argument "--headless powershell.exe $arguments" -WorkingDirectory ([System.IO.Path]::GetTempPath()) -ErrorAction Stop
         $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited -ErrorAction Stop
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
             -ExecutionTimeLimit ([TimeSpan]::Zero) -ErrorAction Stop
         Register-ScheduledTask -TaskName $updateTaskName -Action $action -Principal $principal -Settings $settings -ErrorAction Stop | Out-Null
+        $notify.Visible = $false
         Start-ScheduledTask -TaskName $updateTaskName -ErrorAction Stop
-        $notify.ShowBalloonTip(5000, 'Session Insights', "Starting update to $tag...", [System.Windows.Forms.ToolTipIcon]::Info)
     } catch {
+        $notify.Visible = $true
         $notify.ShowBalloonTip(5000, 'Session Insights', "Could not start the update: $($_.Exception.Message)", [System.Windows.Forms.ToolTipIcon]::Error)
     }
 })

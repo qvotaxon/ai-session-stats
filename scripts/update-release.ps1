@@ -21,6 +21,8 @@ $packageRoot = Join-Path $dataRoot ('update-' + [guid]::NewGuid().ToString('N'))
 $backupPath = Join-Path $dataRoot ('app-backup-' + (Get-Date -Format 'yyyyMMddHHmmss'))
 $failedPath = Join-Path $dataRoot ('app-failed-' + [guid]::NewGuid().ToString('N'))
 $oldTrayInstalled = $false
+$oldTrayDefinition = $null
+$trayStopped = $false
 $serverStopped = $false
 $appMoved = $false
 $lockPath = Join-Path $dataRoot 'update.lock'
@@ -165,6 +167,7 @@ function Restore-PreviousInstall {
 }
 
 try {
+    $oldTrayInstalled = [bool](Get-ScheduledTask -TaskName 'SessionInsightsTray' -ErrorAction SilentlyContinue)
     if ($ExpectedTag -notmatch '^v\d+\.\d+\.\d+$') {
         throw 'The requested release tag is invalid.'
     }
@@ -179,6 +182,12 @@ try {
     }
     New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
     Write-UpdateLog "Starting update to $ExpectedTag."
+
+    if ($oldTrayInstalled) {
+        $oldTrayDefinition = Export-ScheduledTask -TaskName 'SessionInsightsTray' -ErrorAction Stop
+    }
+    $trayStopped = $true
+    Stop-Tray
 
     $headers = @{ 'User-Agent' = 'SessionInsightsTray' }
     $release = Invoke-RestMethod -Uri $releaseApi -Headers $headers -TimeoutSec 15
@@ -234,10 +243,8 @@ try {
             Merge-JsonConfigurationFile -defaultPath (Join-Path $newAppPath $_.Name) -overridePath $_.FullName
         }
 
-    $oldTrayInstalled = [bool](Get-ScheduledTask -TaskName 'SessionInsightsTray' -ErrorAction SilentlyContinue)
     $serverStopped = $true
-    Write-UpdateLog 'Stopping the tray and server before replacing the application.'
-    Stop-Tray
+    Write-UpdateLog 'Stopping the server before replacing the application.'
     Stop-TaskAndProcesses 'SessionInsights' 'SessionInsights.Web' (Join-Path $InstallPath 'SessionInsights.Web.exe')
     Write-UpdateLog "Moving installed application from $InstallPath to $backupPath."
     Move-InstallDirectory $InstallPath $backupPath
@@ -269,8 +276,6 @@ try {
         & (Join-Path $packageRoot 'scripts\install-tray.ps1') -InstallPath $InstallPath -Port $Port
     }
     Write-UpdateLog "Updated successfully to $ExpectedTag. Previous app retained at $backupPath."
-    Add-Type -AssemblyName System.Windows.Forms
-    [System.Windows.Forms.MessageBox]::Show("Session Insights updated to $ExpectedTag.", 'Session Insights', 'OK', 'Information') | Out-Null
 }
 catch {
     $message = $_.Exception.Message
@@ -284,6 +289,19 @@ catch {
         } catch {
             $message = "$message`nRollback failed: $($_.Exception.Message)"
             Write-UpdateLog "Rollback failed: $($_.Exception.Message)"
+        }
+    } elseif ($oldTrayInstalled) {
+        try {
+            if ($trayStopped -and $oldTrayDefinition) {
+                Register-ScheduledTask -TaskName 'SessionInsightsTray' -Xml $oldTrayDefinition -Force -ErrorAction Stop | Out-Null
+            } else {
+                Stop-ScheduledTask -TaskName 'SessionInsightsTray' -ErrorAction Stop
+            }
+            Start-ScheduledTask -TaskName 'SessionInsightsTray' -ErrorAction Stop
+            Write-UpdateLog 'The previous tray task was restored.'
+        } catch {
+            $message = "$message`nCould not restore the tray: $($_.Exception.Message)"
+            Write-UpdateLog "Could not restore the tray: $($_.Exception.Message)"
         }
     }
     Add-Type -AssemblyName System.Windows.Forms

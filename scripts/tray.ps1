@@ -129,20 +129,19 @@ $updateAvailable.add_Click({
         return
     }
 
+    $updateTaskName = 'SessionInsightsUpdate-' + [guid]::NewGuid().ToString('N')
     try {
         $tempUpdater = Join-Path ([System.IO.Path]::GetTempPath()) ('SessionInsightsUpdate-' + [guid]::NewGuid().ToString('N') + '.ps1')
-        Copy-Item $updater $tempUpdater
+        Copy-Item $updater $tempUpdater -ErrorAction Stop
         $appPath = $PSScriptRoot
-        $arguments = "-NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$tempUpdater`" -ExpectedTag `"$tag`" -InstallPath `"$appPath`" -Port $Port"
-        $updateTaskName = 'SessionInsightsUpdate-' + [guid]::NewGuid().ToString('N')
+        $arguments = "-NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$tempUpdater`" -ExpectedTag `"$tag`" -InstallPath `"$appPath`" -Port $Port -UpdateTaskName `"$updateTaskName`""
         $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory ([System.IO.Path]::GetTempPath())
-        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1)
-        $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory ([System.IO.Path]::GetTempPath()) -ErrorAction Stop
+        $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited -ErrorAction Stop
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-            -ExecutionTimeLimit ([TimeSpan]::Zero) -DeleteExpiredTaskAfter (New-TimeSpan -Minutes 1)
-        Register-ScheduledTask -TaskName $updateTaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
-        Start-ScheduledTask -TaskName $updateTaskName
+            -ExecutionTimeLimit ([TimeSpan]::Zero) -ErrorAction Stop
+        Register-ScheduledTask -TaskName $updateTaskName -Action $action -Principal $principal -Settings $settings -ErrorAction Stop | Out-Null
+        Start-ScheduledTask -TaskName $updateTaskName -ErrorAction Stop
         $notify.ShowBalloonTip(5000, 'Session Insights', "Starting update to $tag...", [System.Windows.Forms.ToolTipIcon]::Info)
     } catch {
         $notify.ShowBalloonTip(5000, 'Session Insights', "Could not start the update: $($_.Exception.Message)", [System.Windows.Forms.ToolTipIcon]::Error)

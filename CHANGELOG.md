@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.2...v1.0.3) (2026-11-10)
+
+
+### Bug Fixes
+
+* run tray updates silently in the background ([#9](https://github.com/qvotaxon/ai-session-stats/issues/9)) ([fafa2ad](https://github.com/qvotaxon/ai-session-stats/commit/fafa2adb224a907faf180d15f2e02f742195a927))
+
 ## [1.0.2](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.1...v1.0.2) (2026-11-10)
 
 

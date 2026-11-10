@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.4](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.3...v1.0.4) (2026-11-10)
+
+
+### Bug Fixes
+
+* handle release readiness, update errors, and lock cleanup ([#11](https://github.com/qvotaxon/ai-session-stats/issues/11)) ([71c026d](https://github.com/qvotaxon/ai-session-stats/commit/71c026dc04b1612ee00ecb880a926d4a2dba5269))
+
 ## [1.0.3](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.2...v1.0.3) (2026-11-10)
 
 

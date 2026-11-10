@@ -2,17 +2,36 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  release:
+  release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  release:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -28,11 +47,9 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
       - name: Publish self-contained Windows application
-        env:
-          RELEASE_VERSION: ${{ github.ref_name }}
         run: |
-          [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          version="${RELEASE_VERSION#v}"
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version="${RELEASE_TAG#v}"
           dotnet publish apps/backend/src/Web/SessionInsights.Web.csproj \
             --configuration Release \
             --runtime win-x64 \
@@ -51,13 +68,11 @@ jobs:
           zip -qr ../SessionInsights-win-x64.zip app scripts
           cd ..
           sha256sum SessionInsights-win-x64.zip > SessionInsights-win-x64.zip.sha256
-      - name: Publish GitHub release
+      - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
+          gh release upload "$RELEASE_TAG" \
             SessionInsights-win-x64.zip \
             SessionInsights-win-x64.zip.sha256 \
-            --verify-tag \
-            --title "${GITHUB_REF_NAME}" \
-            --generate-notes
+            --clobber

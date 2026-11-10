@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.1...v1.0.2) (2026-11-10)
+
+
+### Bug Fixes
+
+* handle updater task launch errors and application file locks ([#7](https://github.com/qvotaxon/ai-session-stats/issues/7)) ([585fe55](https://github.com/qvotaxon/ai-session-stats/commit/585fe55f5bb6f931c3d7f64751572887265825de))
+
 ## [1.0.1](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.0...v1.0.1) (2026-11-10)
 
 

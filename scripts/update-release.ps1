@@ -7,7 +7,9 @@ param(
     [Parameter(Mandatory)]
     [string] $ExpectedTag,
     [string] $InstallPath = (Join-Path $env:LOCALAPPDATA 'SessionInsights\app'),
-    [int] $Port = 5180
+    [int] $Port = 5180,
+    [ValidatePattern('^SessionInsightsUpdate-[a-f0-9]{32}$')]
+    [string] $UpdateTaskName
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,27 +54,67 @@ function Merge-JsonConfigurationFile([string] $defaultPath, [string] $overridePa
     }
 }
 
+function Stop-ProcessesAndWait([System.Diagnostics.Process[]] $processes) {
+    foreach ($process in $processes) {
+        try {
+            if (-not $process.HasExited) {
+                try {
+                    $process.Kill()
+                } catch {
+                    if (-not $process.HasExited) { throw }
+                }
+            }
+            if (-not $process.WaitForExit(15000)) {
+                throw "Process $($process.Id) did not exit within 15 seconds."
+            }
+        } finally {
+            $process.Dispose()
+        }
+    }
+}
+
+function Move-InstallDirectory([string] $source, [string] $destination) {
+    $deadline = (Get-Date).AddSeconds(15)
+    while ($true) {
+        try {
+            [System.IO.Directory]::Move($source, $destination)
+            return
+        } catch {
+            $exception = $_.Exception.GetBaseException()
+            $errorCode = $exception.HResult -band 0xffff
+            if ($exception -isnot [System.IO.IOException] -or
+                $errorCode -notin @(32, 33) -or (Get-Date) -ge $deadline) {
+                throw
+            }
+            Start-Sleep -Milliseconds 250
+        }
+    }
+}
+
 function Stop-TaskAndProcesses([string] $taskName, [string] $processName, [string] $path) {
+    $processes = @(Get-Process -Name $processName -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -eq $path } |
+        ForEach-Object { $null = $_.Handle; $_ })
     if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
-        Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction Stop
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
     }
 
-    Get-Process -Name $processName -ErrorAction SilentlyContinue |
-        Where-Object { $_.Path -eq $path } |
-        ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+    Stop-ProcessesAndWait $processes
 }
 
 function Stop-Tray {
+    $trayPath = Join-Path $InstallPath 'tray.ps1'
+    $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
+        Where-Object { $_.CommandLine -like "*$trayPath*" } |
+        ForEach-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue } |
+        ForEach-Object { $null = $_.Handle; $_ })
     if (Get-ScheduledTask -TaskName 'SessionInsightsTray' -ErrorAction SilentlyContinue) {
-        Stop-ScheduledTask -TaskName 'SessionInsightsTray' -ErrorAction SilentlyContinue
+        Stop-ScheduledTask -TaskName 'SessionInsightsTray' -ErrorAction Stop
         Unregister-ScheduledTask -TaskName 'SessionInsightsTray' -Confirm:$false
     }
 
-    $trayPath = Join-Path $InstallPath 'tray.ps1'
-    Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
-        Where-Object { $_.CommandLine -like "*$trayPath*" } |
-        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Stop-ProcessesAndWait $processes
 }
 
 function Restore-PreviousInstall {
@@ -82,7 +124,7 @@ function Restore-PreviousInstall {
         Remove-Item $InstallPath -Recurse -Force
     }
     if (Test-Path $backupPath) {
-        Move-Item $backupPath $InstallPath
+        Move-InstallDirectory $backupPath $InstallPath
     }
 
     $installTask = Join-Path $packageRoot 'scripts\install-task.ps1'
@@ -164,11 +206,14 @@ try {
 
     $oldTrayInstalled = [bool](Get-ScheduledTask -TaskName 'SessionInsightsTray' -ErrorAction SilentlyContinue)
     $serverStopped = $true
+    Write-UpdateLog 'Stopping the tray and server before replacing the application.'
     Stop-Tray
     Stop-TaskAndProcesses 'SessionInsights' 'SessionInsights.Web' (Join-Path $InstallPath 'SessionInsights.Web.exe')
-    Move-Item $InstallPath $backupPath
+    Write-UpdateLog "Moving installed application from $InstallPath to $backupPath."
+    Move-InstallDirectory $InstallPath $backupPath
     $appMoved = $true
-    Move-Item $newAppPath $InstallPath
+    Write-UpdateLog "Moving verified application from $newAppPath to $InstallPath."
+    Move-InstallDirectory $newAppPath $InstallPath
 
     & (Join-Path $packageRoot 'scripts\install-task.ps1') -InstallPath $InstallPath -PublishedApp
     $healthUri = "http://127.0.0.1:$Port/health"
@@ -196,8 +241,10 @@ try {
 catch {
     $message = $_.Exception.Message
     Write-UpdateLog "Update failed: $message"
+    Write-UpdateLog "$($_.InvocationInfo.PositionMessage)`n$($_.ScriptStackTrace)"
     if ($serverStopped) {
         try {
+            Write-UpdateLog 'Restoring the previous application.'
             Restore-PreviousInstall
             Write-UpdateLog 'The previous application was restored.'
         } catch {
@@ -214,5 +261,12 @@ finally {
     }
     if ($lockStream) {
         $lockStream.Dispose()
+    }
+    if ($UpdateTaskName) {
+        try {
+            Unregister-ScheduledTask -TaskName $UpdateTaskName -Confirm:$false -ErrorAction Stop
+        } catch {
+            Write-UpdateLog "Could not remove updater task ${UpdateTaskName}: $($_.Exception.Message)"
+        }
     }
 }

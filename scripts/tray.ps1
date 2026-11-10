@@ -37,6 +37,7 @@ $notify.Text = 'Session Insights'
 $notify.Visible = $true
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
+$menu.ShowItemToolTips = $true
 $open = $menu.Items.Add('Open dashboard')
 $open.Font = New-Object System.Drawing.Font($open.Font, [System.Drawing.FontStyle]::Bold)
 $restart = $menu.Items.Add('Restart server')
@@ -81,30 +82,51 @@ $script:probe = $null
 $script:probeHandle = $null
 $script:graceUntil = [DateTime]::MinValue
 $script:latestTag = $null
+$script:installedVersion = $null
 $script:checkRequested = $false
 
 $script:updateCheckScript = {
     param($port)
+    $ErrorActionPreference = 'Stop'
     $current = Invoke-RestMethod -Uri "http://127.0.0.1:$port/version" -TimeoutSec 5
     if ($current.version -notmatch '^\d+\.\d+\.\d+$') {
         throw 'The installed application returned an invalid version.'
     }
 
-    $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/qvotaxon/ai-session-stats/releases/latest' `
-        -Headers @{ 'User-Agent' = 'SessionInsightsTray' } -TimeoutSec 15
-    $tag = [string]$release.tag_name
-    if ($release.prerelease -or $release.draft -or $tag -notmatch '^v\d+\.\d+\.\d+$') {
-        throw 'GitHub did not return a supported stable release.'
-    }
-
-    $currentVersion = [version]$current.version
-    $latestVersion = [version]$tag.Substring(1)
-    [pscustomobject]@{
+    $result = [pscustomobject]@{
         CurrentVersion = $current.version
-        LatestVersion = $latestVersion.ToString(3)
-        LatestTag = $tag
-        Available = ($latestVersion -gt $currentVersion)
+        LatestVersion = $null
+        LatestTag = $null
+        Available = $false
+        CheckError = $null
     }
+    try {
+        $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/qvotaxon/ai-session-stats/releases/latest' `
+            -Headers @{ 'User-Agent' = 'SessionInsightsTray'; 'Cache-Control' = 'no-cache' } -TimeoutSec 15
+        $tag = [string]$release.tag_name
+        if ($release.prerelease -or $release.draft -or $tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw 'GitHub did not return a supported stable release.'
+        }
+
+        $currentVersion = [version]$current.version
+        $latestVersion = [version]$tag.Substring(1)
+        if ($latestVersion -gt $currentVersion) {
+            $assetNames = @($release.assets | Where-Object { $_.state -eq 'uploaded' } | ForEach-Object { $_.name })
+            if ('SessionInsights-win-x64.zip' -notin $assetNames -or
+                'SessionInsights-win-x64.zip.sha256' -notin $assetNames) {
+                throw 'The latest release is not ready for update yet. Try again later.'
+            }
+        }
+        $result.LatestVersion = $latestVersion.ToString(3)
+        $result.LatestTag = $tag
+        $result.Available = ($latestVersion -gt $currentVersion)
+    } catch {
+        $result.CheckError = $_.Exception.GetBaseException().Message
+        if ($_.ErrorDetails.Message -match 'API rate limit exceeded') {
+            $result.CheckError = 'GitHub API rate limit reached. Try again after the rate limit resets.'
+        }
+    }
+    return $result
 }
 $script:updateCheck = $null
 $script:updateCheckHandle = $null
@@ -172,20 +194,30 @@ $pollTimer.add_Tick({
     if ($script:updateCheck -and $script:updateCheckHandle.IsCompleted) {
         try {
             $result = $script:updateCheck.EndInvoke($script:updateCheckHandle) | Select-Object -First 1
+            $script:installedVersion = $result.CurrentVersion
             $script:versionItem.Text = "Installed version: $($result.CurrentVersion)"
             $script:latestTag = $result.LatestTag
             $script:updateAvailable.Text = "Update to $($result.LatestTag)"
             $script:updateAvailable.Visible = [bool]$result.Available
-            if ($result.Available -and $script:checkRequested) {
+            $script:checkForUpdates.ToolTipText = [string]$result.CheckError
+            if ($result.CheckError) {
+                if ($script:checkRequested) {
+                    $notify.ShowBalloonTip(5000, 'Session Insights', "Could not check for updates: $($result.CheckError)", [System.Windows.Forms.ToolTipIcon]::Error)
+                }
+            } elseif ($result.Available -and $script:checkRequested) {
                 $notify.ShowBalloonTip(5000, 'Session Insights', "Update available: $($result.LatestTag)", [System.Windows.Forms.ToolTipIcon]::Info)
             } elseif (-not $result.Available -and $script:checkRequested) {
                 $notify.ShowBalloonTip(3000, 'Session Insights', 'You are up to date.', [System.Windows.Forms.ToolTipIcon]::Info)
             }
         } catch {
-            $script:versionItem.Text = 'Installed version: unavailable'
+            $script:versionItem.Text = if ($script:installedVersion) {
+                "Installed version: $($script:installedVersion) (server unavailable)"
+            } else {
+                'Installed version: unavailable'
+            }
             $script:updateAvailable.Visible = $false
             if ($script:checkRequested) {
-                $notify.ShowBalloonTip(5000, 'Session Insights', "Could not check for updates: $($_.Exception.Message)", [System.Windows.Forms.ToolTipIcon]::Error)
+                $notify.ShowBalloonTip(5000, 'Session Insights', "Could not check for updates: $($_.Exception.GetBaseException().Message)", [System.Windows.Forms.ToolTipIcon]::Error)
             }
         } finally {
             $script:updateCheck.Dispose()

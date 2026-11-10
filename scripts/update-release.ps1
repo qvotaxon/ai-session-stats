@@ -27,9 +27,23 @@ $serverStopped = $false
 $appMoved = $false
 $lockPath = Join-Path $dataRoot 'update.lock'
 $lockStream = $null
+$failureMessage = $null
 
 function Write-UpdateLog([string] $message) {
     Add-Content -Path $logPath -Value "[$(Get-Date -Format o)] $message"
+}
+
+function Open-UpdateLock([string] $path) {
+    try {
+        return [System.IO.FileStream]::new($path, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None, 4096, [System.IO.FileOptions]::DeleteOnClose)
+    } catch {
+        $exception = $_.Exception.GetBaseException()
+        $errorCode = $exception.HResult -band 0xffff
+        if ($exception -is [System.IO.IOException] -and $errorCode -in @(32, 33)) {
+            throw 'Another update is already in progress. Close any previous update error dialog and try again.'
+        }
+        throw "Could not acquire the update lock '${path}': $($exception.Message)"
+    }
 }
 
 function Merge-JsonConfiguration([object] $defaults, [object] $overrides) {
@@ -166,6 +180,28 @@ function Restore-PreviousInstall {
     }
 }
 
+function Get-ReleaseAssets {
+    $zipName = 'SessionInsights-win-x64.zip'
+    $checksumName = "$zipName.sha256"
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        $release = Invoke-RestMethod -Uri $releaseApi -Headers $headers -TimeoutSec 15
+        if ($release.tag_name -ne $ExpectedTag -or $release.prerelease -or $release.draft) {
+            throw 'The requested version is no longer the latest stable release.'
+        }
+
+        $zipAsset = $release.assets | Where-Object { $_.name -eq $zipName -and $_.state -eq 'uploaded' } | Select-Object -First 1
+        $checksumAsset = $release.assets | Where-Object { $_.name -eq $checksumName -and $_.state -eq 'uploaded' } | Select-Object -First 1
+        if ($zipAsset -and $checksumAsset) {
+            return @($zipAsset, $checksumAsset)
+        }
+        if ($attempt -lt 5) {
+            Write-UpdateLog "Release assets are not ready; retrying (attempt $attempt of 5)."
+            Start-Sleep -Seconds 5
+        }
+    }
+    throw 'The release is missing its application archive or SHA-256 checksum. Try again later.'
+}
+
 try {
     $oldTrayInstalled = [bool](Get-ScheduledTask -TaskName 'SessionInsightsTray' -ErrorAction SilentlyContinue)
     if ($ExpectedTag -notmatch '^v\d+\.\d+\.\d+$') {
@@ -175,11 +211,7 @@ try {
         throw "The installed application was not found at $InstallPath."
     }
     New-Item -ItemType Directory -Force -Path $dataRoot | Out-Null
-    try {
-        $lockStream = [System.IO.FileStream]::new($lockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None, 4096, [System.IO.FileOptions]::DeleteOnClose)
-    } catch {
-        throw 'Another update is already in progress.'
-    }
+    $lockStream = Open-UpdateLock $lockPath
     New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
     Write-UpdateLog "Starting update to $ExpectedTag."
 
@@ -189,19 +221,10 @@ try {
     $trayStopped = $true
     Stop-Tray
 
-    $headers = @{ 'User-Agent' = 'SessionInsightsTray' }
-    $release = Invoke-RestMethod -Uri $releaseApi -Headers $headers -TimeoutSec 15
-    if ($release.tag_name -ne $ExpectedTag -or $release.prerelease -or $release.draft) {
-        throw 'The requested version is no longer the latest stable release.'
-    }
-
+    $headers = @{ 'User-Agent' = 'SessionInsightsTray'; 'Cache-Control' = 'no-cache' }
     $zipName = 'SessionInsights-win-x64.zip'
     $checksumName = "$zipName.sha256"
-    $zipAsset = $release.assets | Where-Object { $_.name -eq $zipName } | Select-Object -First 1
-    $checksumAsset = $release.assets | Where-Object { $_.name -eq $checksumName } | Select-Object -First 1
-    if (-not $zipAsset -or -not $checksumAsset) {
-        throw 'The release is missing its application archive or SHA-256 checksum.'
-    }
+    $zipAsset, $checksumAsset = Get-ReleaseAssets
 
     foreach ($asset in @($zipAsset, $checksumAsset)) {
         $uri = [Uri]$asset.browser_download_url
@@ -290,7 +313,7 @@ catch {
             $message = "$message`nRollback failed: $($_.Exception.Message)"
             Write-UpdateLog "Rollback failed: $($_.Exception.Message)"
         }
-    } elseif ($oldTrayInstalled) {
+    } elseif ($oldTrayInstalled -and $lockStream) {
         try {
             if ($trayStopped -and $oldTrayDefinition) {
                 Register-ScheduledTask -TaskName 'SessionInsightsTray' -Xml $oldTrayDefinition -Force -ErrorAction Stop | Out-Null
@@ -304,8 +327,7 @@ catch {
             Write-UpdateLog "Could not restore the tray: $($_.Exception.Message)"
         }
     }
-    Add-Type -AssemblyName System.Windows.Forms
-    [System.Windows.Forms.MessageBox]::Show("Session Insights could not be updated.`n$message", 'Session Insights update failed', 'OK', 'Error') | Out-Null
+    $failureMessage = $message
 }
 finally {
     if (Test-Path $packageRoot) {
@@ -321,4 +343,9 @@ finally {
             Write-UpdateLog "Could not remove updater task ${UpdateTaskName}: $($_.Exception.Message)"
         }
     }
+}
+
+if ($failureMessage) {
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.MessageBox]::Show("Session Insights could not be updated.`n$failureMessage", 'Session Insights update failed', 'OK', 'Error') | Out-Null
 }

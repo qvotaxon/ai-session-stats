@@ -16,6 +16,8 @@ The updater retrieves the latest release metadata from the fixed repository over
 
 The updater swaps only `%LOCALAPPDATA%\SessionInsights\app`. It leaves the surrounding data directory untouched and retains the replaced app as a timestamped backup. Before the swap it waits for the tray and server processes to exit, and retries directory renames for up to 15 seconds on sharing or lock violations. It restarts the server and checks `/health` for up to 30 seconds; on failure it restores the prior app and scheduled tasks. The tray reports success or failure, and `update.log` is retained outside the app folder, including the failing script location and rollback progress.
 
+On a health-check timeout, the log also records the last HTTP error, server task state and result, and the process listening on the configured port (if any). Rollback retains a replaced but failed application in an `app-failed-*` directory for inspection instead of deleting it.
+
 ## Consequences
 
 - Users can update without a source checkout, pnpm, or a .NET SDK/runtime.

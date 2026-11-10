@@ -19,6 +19,7 @@ $dataRoot = Split-Path -Parent $InstallPath
 $logPath = Join-Path $dataRoot 'update.log'
 $packageRoot = Join-Path $dataRoot ('update-' + [guid]::NewGuid().ToString('N'))
 $backupPath = Join-Path $dataRoot ('app-backup-' + (Get-Date -Format 'yyyyMMddHHmmss'))
+$failedPath = Join-Path $dataRoot ('app-failed-' + [guid]::NewGuid().ToString('N'))
 $oldTrayInstalled = $false
 $serverStopped = $false
 $appMoved = $false
@@ -117,11 +118,40 @@ function Stop-Tray {
     Stop-ProcessesAndWait $processes
 }
 
+function Write-ServerDiagnostics {
+    try {
+        $task = Get-ScheduledTask -TaskName 'SessionInsights' -ErrorAction Stop
+        $info = Get-ScheduledTaskInfo -TaskName 'SessionInsights' -ErrorAction Stop
+        $result = '0x{0:X8}' -f [uint32]$info.LastTaskResult
+        Write-UpdateLog "Server task state: $($task.State); last result: $result; last run: $($info.LastRunTime.ToString('o'))."
+        foreach ($action in $task.Actions) {
+            Write-UpdateLog "Server task action: $($action.Execute) $($action.Arguments); working directory: $($action.WorkingDirectory)."
+        }
+    } catch {
+        Write-UpdateLog "Could not read server task diagnostics: $($_.Exception.Message)"
+    }
+
+    try {
+        $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop |
+            Where-Object { $_.LocalPort -eq $Port })
+        if (-not $listeners) {
+            Write-UpdateLog "No TCP listener was found on port $Port."
+        }
+        foreach ($listener in $listeners) {
+            $owner = Get-Process -Id $listener.OwningProcess -ErrorAction Stop
+            Write-UpdateLog "Port $Port listener: $($listener.LocalAddress); process $($owner.Id); executable $($owner.Path)."
+        }
+    } catch {
+        Write-UpdateLog "Could not read port diagnostics: $($_.Exception.Message)"
+    }
+}
+
 function Restore-PreviousInstall {
     Stop-TaskAndProcesses 'SessionInsights' 'SessionInsights.Web' (Join-Path $InstallPath 'SessionInsights.Web.exe')
     Stop-Tray
     if ($appMoved -and (Test-Path $InstallPath)) {
-        Remove-Item $InstallPath -Recurse -Force
+        Move-InstallDirectory $InstallPath $failedPath
+        Write-UpdateLog "Failed application retained at $failedPath."
     }
     if (Test-Path $backupPath) {
         Move-InstallDirectory $backupPath $InstallPath
@@ -219,16 +249,20 @@ try {
     $healthUri = "http://127.0.0.1:$Port/health"
     $deadline = (Get-Date).AddSeconds(30)
     $healthy = $false
+    $healthError = 'No health response received.'
     while ((Get-Date) -lt $deadline) {
         try {
             $healthy = (Invoke-WebRequest -Uri $healthUri -TimeoutSec 2 -UseBasicParsing).StatusCode -eq 200
         } catch {
+            $healthError = $_.Exception.Message
             Start-Sleep -Seconds 1
         }
         if ($healthy) { break }
     }
     if (-not $healthy) {
-        throw 'The updated server did not become healthy within 30 seconds.'
+        Write-UpdateLog "Last request to ${healthUri} failed: $healthError"
+        Write-ServerDiagnostics
+        throw 'The updated server did not become healthy within 30 seconds. See update.log for task and port diagnostics.'
     }
 
     if ($oldTrayInstalled) {

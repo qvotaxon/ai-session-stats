@@ -91,7 +91,7 @@ function Stop-ProcessesAndWait([System.Diagnostics.Process[]] $processes) {
 }
 
 function Move-InstallDirectory([string] $source, [string] $destination) {
-    $deadline = (Get-Date).AddSeconds(15)
+    $deadline = (Get-Date).AddSeconds(60)
     while ($true) {
         try {
             [System.IO.Directory]::Move($source, $destination)
@@ -99,8 +99,10 @@ function Move-InstallDirectory([string] $source, [string] $destination) {
         } catch {
             $exception = $_.Exception.GetBaseException()
             $errorCode = $exception.HResult -band 0xffff
-            if ($exception -isnot [System.IO.IOException] -or
-                $errorCode -notin @(32, 33) -or (Get-Date) -ge $deadline) {
+            # 5 (access denied) is what a directory move reports while a process, or Defender scanning a new executable, still holds a file in it.
+            $isLock = ($exception -is [System.IO.IOException] -and $errorCode -in @(32, 33)) -or
+                $exception -is [System.UnauthorizedAccessException]
+            if (-not $isLock -or (Get-Date) -ge $deadline) {
                 throw
             }
             Start-Sleep -Milliseconds 250
@@ -277,7 +279,8 @@ try {
 
     & (Join-Path $packageRoot 'scripts\install-task.ps1') -InstallPath $InstallPath -PublishedApp
     $healthUri = "http://127.0.0.1:$Port/health"
-    $deadline = (Get-Date).AddSeconds(30)
+    # Defender's cloud check can hold a never-seen executable (every release has a new hash) for a minute or more on first run.
+    $deadline = (Get-Date).AddSeconds(180)
     $healthy = $false
     $healthError = 'No health response received.'
     while ((Get-Date) -lt $deadline) {
@@ -292,7 +295,7 @@ try {
     if (-not $healthy) {
         Write-UpdateLog "Last request to ${healthUri} failed: $healthError"
         Write-ServerDiagnostics
-        throw 'The updated server did not become healthy within 30 seconds. See update.log for task and port diagnostics.'
+        throw 'The updated server did not become healthy within 180 seconds. See update.log for task and port diagnostics.'
     }
 
     if ($oldTrayInstalled) {

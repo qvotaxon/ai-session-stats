@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.5](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.4...v1.0.5) (2026-11-11)
+
+
+### Bug Fixes
+
+* wait longer for the updated server and retry locked directory moves ([#13](https://github.com/qvotaxon/ai-session-stats/issues/13)) ([b021923](https://github.com/qvotaxon/ai-session-stats/commit/b021923c813970152bc16aa18484f04fcdc0f4d1))
+
 ## [1.0.4](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.3...v1.0.4) (2026-11-10)
 
 

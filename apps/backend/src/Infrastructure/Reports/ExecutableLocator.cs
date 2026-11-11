@@ -26,7 +26,8 @@ internal sealed class ExecutableLocator(IFileSystem fs) : IExecutableLocator
 
         foreach (var directory in directories)
         {
-            foreach (var extension in Extensions.Prepend(string.Empty))
+            // npm drops an extensionless sh shim next to the .cmd one. Windows cannot start it (error 193), so it is tried last.
+            foreach (var extension in Extensions.Append(string.Empty))
             {
                 var candidate = fs.Path.Combine(directory, nameOrPath + extension);
                 if (fs.File.Exists(candidate))

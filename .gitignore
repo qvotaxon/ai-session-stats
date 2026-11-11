@@ -8,3 +8,4 @@ obj/
 .env.local
 publish/
 docs/ideas/
+scripts/installer/output/

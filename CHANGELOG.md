@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.6](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.5...v1.0.6) (2026-11-11)
+
+
+### Bug Fixes
+
+* trigger patch release to verify the longer update health wait ([#15](https://github.com/qvotaxon/ai-session-stats/issues/15)) ([df9546e](https://github.com/qvotaxon/ai-session-stats/commit/df9546e68d43ed314ddf488159d4da727f2d7e4a))
+
 ## [1.0.5](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.4...v1.0.5) (2026-11-11)
 
 

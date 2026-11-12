@@ -35,8 +35,6 @@ internal sealed class ClaudeSessionReader(
             return [];
         }
 
-
-
         var byId = new Dictionary<string, SessionFileGroup>(StringComparer.OrdinalIgnoreCase);
         foreach (var projectDir in fs.Directory.EnumerateDirectories(root))
         {

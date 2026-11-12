@@ -48,6 +48,43 @@ describe("SessionDetailPage", () => {
     expect(banner).toHaveTextContent("2026");
   });
 
+  it("shows version changes and missing evidence without using the installed plugin version", async () => {
+    get.mockResolvedValue(
+      makeDetail({
+        harness: {
+          observations: [
+            {
+              at: "2026-11-04T08:00:00Z",
+              kind: "activation",
+              version: "0.26.0",
+              evidence: "hookPath",
+              cliVersion: "2.1.302",
+            },
+            {
+              at: "2026-11-04T08:01:00Z",
+              kind: "activation",
+              version: "0.26.1",
+              evidence: "hookPath",
+              cliVersion: "2.1.302",
+            },
+            { at: null, kind: "activation", version: null, evidence: "unknown", cliVersion: null },
+          ],
+          activity: [],
+        },
+      }),
+    );
+    renderApp("/sessions/s-1");
+
+    expect(await screen.findByText("MSDC harness evidence")).toBeInTheDocument();
+    expect(screen.getByText("0.26.0")).toBeInTheDocument();
+    expect(screen.getByText("0.26.1")).toBeInTheDocument();
+    expect(screen.getByText("Unknown version")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "All sessions" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/sessions"),
+    );
+  });
+
   it("shows the recap banner without a timestamp when none is known", async () => {
     get.mockResolvedValue(makeDetail({ recap: "We are fixing the scheduler.", recapAt: null }));
     renderApp("/sessions/s-1");

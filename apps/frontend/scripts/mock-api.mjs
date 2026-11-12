@@ -16,6 +16,7 @@ const sessions = Array.from({ length: 57 }, (_, i) => {
         title: `Refactor module ${i + 1}: improve the retry logic and add tests for the new scheduler`,
         project: i % 5 === 0 ? null : `C:\\git\\project-${i % 4}`,
         startedAt,
+        lastActivityAt: startedAt,
         endedAt: new Date(Date.parse(startedAt) + durationSeconds * 1000).toISOString(),
         durationSeconds,
         models: MODELS.slice(0, 1 + (i % 3)),
@@ -154,6 +155,32 @@ createServer((req, res) => {
     const url = new URL(req.url, "http://localhost");
     const parts = url.pathname.split("/").filter(Boolean);
     if (url.pathname === "/health") return send(res, 200, { status: "Healthy" });
+    if (url.pathname === "/api/v1/overview") {
+        return send(res, 200, {
+            generatedAt: new Date().toISOString(),
+            totalSessions: sessions.length,
+            recentlyActiveSessions: sessions.filter((s) => Date.parse(s.lastActivityAt) >= Date.now() - 7 * 86400000).length,
+            totalTokens: sessions.reduce((n, s) => n + s.totalTokens, 0),
+            toolCalls: sessions.reduce((n, s) => n + s.toolCallCount, 0),
+            toolFailures: sessions.length * 3,
+            hooks: sessions.reduce((n, s) => n + s.hookCount, 0),
+            hookFailures: sessions.length,
+            sessionsWithVersionEvidence: 0,
+            attributedHealthEvents: 0,
+            totalHealthEvents: sessions.reduce((n, s) => n + s.toolCallCount + s.hookCount, 0),
+            recentSessions: sessions.slice(0, 3),
+            harnessVersions: [],
+        });
+    }
+    if (url.pathname === "/api/v1/harness/installations") {
+        return send(res, 200, ["claude", "copilot"].map((source) => ({
+            source,
+            status: "unavailable",
+            checkedAt: new Date().toISOString(),
+            installations: [],
+            error: "Synthetic API: local CLI inventory is not available.",
+        })));
+    }
     if (parts[0] !== "api" || parts[1] !== "v1" || parts[2] !== "sessions") return problem(res, 404, "Not found");
 
     if (parts.length === 3) {

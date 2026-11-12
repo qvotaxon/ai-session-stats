@@ -31,7 +31,7 @@ describe("SessionsPage", () => {
   });
 
   it("renders one table row per session with formatted values", async () => {
-    renderApp("/");
+    renderApp("/sessions");
     const table = await screen.findByRole("table");
     expect(within(table).getByRole("link", { name: "Alpha session" })).toHaveAttribute("href", "/sessions/a");
     expect(within(table).getByRole("link", { name: "Beta session" })).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe("SessionsPage", () => {
 
   it("moves to the next page and keeps it in the URL", async () => {
     const user = userEvent.setup();
-    const { router } = renderApp("/");
+    const { router } = renderApp("/sessions");
     await screen.findByRole("table");
 
     await user.click(screen.getByRole("button", { name: /next/i }));
@@ -55,7 +55,7 @@ describe("SessionsPage", () => {
   });
 
   it("restores state from the URL and falls back on invalid params", async () => {
-    renderApp("/?page=2&source=claude&sort=totalTokens&direction=asc&pageSize=999");
+    renderApp("/sessions?page=2&source=claude&sort=totalTokens&direction=asc&pageSize=999");
     await screen.findByRole("table");
     expect(list).toHaveBeenCalledWith(
       expect.objectContaining({ page: 2, source: "claude", sort: "totalTokens", direction: "asc", pageSize: 25 }),
@@ -66,7 +66,7 @@ describe("SessionsPage", () => {
 
   it("sorts by a column, resetting to page 1 and flipping direction on repeat clicks", async () => {
     const user = userEvent.setup();
-    const { router } = renderApp("/?page=2");
+    const { router } = renderApp("/sessions?page=2");
     await screen.findByRole("table");
 
     await user.click(screen.getByRole("button", { name: "Sort by Tokens" }));
@@ -80,7 +80,7 @@ describe("SessionsPage", () => {
 
   it("debounces the search box into the URL", async () => {
     const user = userEvent.setup();
-    const { router } = renderApp("/?page=2");
+    const { router } = renderApp("/sessions?page=2");
     await screen.findByRole("table");
 
     await user.type(screen.getByRole("searchbox", { name: "Search sessions" }), "alp");
@@ -91,14 +91,14 @@ describe("SessionsPage", () => {
 
   it("shows an empty state", async () => {
     list.mockResolvedValue({ items: [], page: 1, pageSize: 25, totalCount: 0, totalPages: 0 });
-    renderApp("/");
+    renderApp("/sessions");
     expect(await screen.findByText("No sessions found")).toBeInTheDocument();
   });
 
   it("shows an error state with retry", async () => {
     const user = userEvent.setup();
     list.mockRejectedValueOnce(new Error("backend down"));
-    renderApp("/");
+    renderApp("/sessions");
     expect(await screen.findByText("backend down")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Try again" }));

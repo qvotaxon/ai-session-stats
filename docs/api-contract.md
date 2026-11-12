@@ -71,6 +71,83 @@ SessionSummary:
 ```
 `cost` and `codeChanges` are `null` when the CLI does not expose them. `timeline` has at most 60 equal-width buckets spanning the session. `notes` lists human-readable "not available for this CLI" remarks. Report turns are excluded from all metrics.
 
+SessionDetail also includes `harness`:
+```json
+{
+  "observations": [
+    { "at":"iso|null", "kind":"activation|invocation", "version":"string|null",
+      "evidence":"hookPath|invocation|unknown|conflicting", "cliVersion":"string|null" }
+  ],
+  "activity": [
+    { "version":"string|null", "cliVersion":"string|null",
+      "toolCalls":0, "toolFailures":0, "hooks":0, "hookFailures":0 }
+  ]
+}
+```
+
+Only the MSDC harness (`msdc-harness`, or qualified identity `msdc-harness@msdc-plugins`) is recognized.
+Claude observations come from `SessionStart` hook attachments: only a supported version token from a
+`msdc-harness/<version>/` path in `stdout` is retained. No hook stdout or paths are returned or persisted
+by this feature. This is **indirect evidence**, not a verified plugin activation record. Missing or
+conflicting versions reset attribution to unknown. Tool executions must start and finish strictly
+within a recorded activation window; same-boundary events, untimed events, and subagent activity
+are unattributed. An untimed activation makes all health attribution for that session unknown.
+
+Copilot observations use populated `pluginName`/`pluginVersion` fields on `skill.invoked` and
+`skill.invoked_ref` events outside report turns. They identify individual invocations only; they
+never establish a loaded-version window. Tool-telemetry copies are not used as fallback without
+a verified correlation contract. Missing versions are not filled from a majority version or the
+currently installed plugin.
+
+### GET /api/v1/overview
+Returns all-history aggregates from **all listable indexed sessions**, not one list page:
+```json
+{
+  "generatedAt":"iso", "totalSessions":0, "recentlyActiveSessions":0,
+  "totalTokens":0, "toolCalls":0, "toolFailures":0, "hooks":0, "hookFailures":0,
+  "sessionsWithVersionEvidence":0, "attributedHealthEvents":0, "totalHealthEvents":0,
+  "recentSessions":["SessionSummary"],
+  "harnessVersions":[
+    { "source":"claude|copilot", "version":"string", "cliVersion":"string|null",
+      "sessions":0, "directInvocations":0, "activations":0,
+      "toolCalls":0, "toolFailures":0, "hooks":0, "hookFailures":0,
+      "sessionIds":["string"] }
+  ]
+}
+```
+`recentSessions` contains at most three summaries ordered by last activity descending.
+`recentlyActiveSessions` counts sessions with last activity in the preceding seven days (UTC).
+All other totals cover indexed history, not seven-day usage.
+Version rows are grouped by provider, harness version, and recorded CLI version. `sessions` can
+overlap between version rows when a session spans updates. `sessionIds` links each row to its evidence.
+Health metrics are general session tool/hook outcomes, **not plugin-component failures or causal
+regression verdicts**. Guard counts are not added to failure totals; existing reader classifications
+are preserved, including Claude hook error/blocking-error records classified as failed executions.
+A guard block is not itself evidence of a regression. Lifetime tokens are never distributed between harness versions.
+
+### GET /api/v1/harness/installations
+Returns one result per provider:
+```json
+[
+  { "source":"claude|copilot", "status":"installed|notInstalled|unavailable|error",
+    "checkedAt":"iso",
+    "installations":[{ "version":"string", "enabled":true, "scope":"user|project|local|managed|null" }],
+    "error":"string|null" }
+]
+```
+`enabled` can be `null` when the CLI does not expose it. Inventory is read-only and cached for
+one minute; each invocation has a 15-second timeout. The only command executed is the resolved
+CLI's `plugin list --json`; it never installs, updates, or invokes a model. Lists can be a JSON
+array or an object with a `plugins` array. Unknown output structures, unsupported versions,
+timeouts and failed commands have explicit error status, never a successful empty inventory.
+Raw CLI stdout/stderr and installation paths are not returned or logged.
+
+Inventory runs in the application directory, not every session project, and describes only that
+CLI/account/scope. It does not backfill session history or prove what an open session loaded.
+Configured `ClaudeConfigDir`/`CopilotHome` are passed to their CLIs; otherwise inherited
+`CLAUDE_CONFIG_DIR`/`COPILOT_HOME` apply. Session discovery respects those same homes unless
+`ClaudeRoot`/`CopilotRoot` explicitly overrides the transcript directory.
+
 ### Reports
 ReportRun:
 ```json

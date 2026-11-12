@@ -1,6 +1,29 @@
 # ai-session-stats
 A tool for visualizing ai sessions, their tool calls and other relevant performance metrics
 
+## Dashboard and MSDC harness health
+
+The home page shows three recently active sessions, all-history usage totals, recent activity,
+and a preview of harness health. **Sessions** now lives at `/sessions`; session-detail URLs are
+unchanged. **Harness** (`/harness`) shows local installed-plugin inventories, observed harness
+versions, supporting sessions, and attributed tool/hook failure rates.
+
+Installed versions are discovered using read-only `claude plugin list --json` and
+`copilot plugin list --json`, never the plugin update command. Historical evidence is separate:
+Claude versions are inferred from recorded startup/resume hook paths; Copilot versions identify
+individual recorded skill invocations. Missing evidence stays unknown, and a session can contain
+multiple versions. No plugin update or access to plugin source is required.
+
+Comparisons keep providers and recorded CLI versions separate. They describe session health,
+not proof that the harness caused a failure; project, task, and model differences still matter.
+Attribution coverage and supporting sessions remain visible. Lifetime token totals are never
+assigned to a harness version. Claude subscription allowance/API credit balances are explicitly
+unavailable, rather than estimated from session tokens.
+
+This feature runs locally and does not invoke models or send telemetry. It retains only
+allowlisted version evidence and metrics, not raw hook output or installation paths. See
+`docs/api-contract.md` for attribution rules and supported CLI metadata shapes.
+
 ## Installing
 
 Download `SessionInsights-Setup.exe` from the [latest release](https://github.com/qvotaxon/ai-session-stats/releases/latest) and run it. No admin rights or .NET install are needed. It installs to `%LOCALAPPDATA%\SessionInsights\app`, starts the server and tray icon at every logon, and offers to open http://localhost:5180. The installer is not code-signed yet, so Windows SmartScreen may warn: choose **More info**, then **Run anyway**. Uninstall from Windows **Installed apps**: it removes everything, including the scheduled tasks, tray icon, Start Menu shortcut and all data (token, reports, logs) under `%LOCALAPPDATA%\SessionInsights`. **Quit Session Insights** in the tray menu stops the server and the tray icon; the Start Menu shortcut starts them again.

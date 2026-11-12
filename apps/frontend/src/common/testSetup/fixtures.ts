@@ -65,6 +65,7 @@ export const makeDetail = (overrides: Partial<SessionDetail> = {}): SessionDetai
   timeline: [{ bucketStart: "2026-11-04T08:00:00Z", toolCalls: 2, hooks: 1, guards: 0, tokens: 1000 }],
   notes: [],
   canContinue: true,
+  harness: { observations: [], activity: [] },
   ...overrides,
 });
 

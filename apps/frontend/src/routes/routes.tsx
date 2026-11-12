@@ -18,8 +18,20 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
+  component: lazyRouteComponent(() => import("../pages/DashboardPage")),
+});
+
+const sessionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/sessions",
   validateSearch: sessionsSearchSchema,
   component: lazyRouteComponent(() => import("../pages/SessionsPage")),
+});
+
+const harnessRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/harness",
+  component: lazyRouteComponent(() => import("../pages/HarnessPage")),
 });
 
 const sessionDetailRoute = createRoute({
@@ -46,7 +58,15 @@ const changelogRoute = createRoute({
   component: lazyRouteComponent(() => import("../pages/ChangelogPage")),
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sessionDetailRoute, settingsRoute, applicationLogRoute, changelogRoute]);
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  sessionsRoute,
+  harnessRoute,
+  sessionDetailRoute,
+  settingsRoute,
+  applicationLogRoute,
+  changelogRoute,
+]);
 
 export const createAppRouter = (history?: RouterHistory) => createRouter({ routeTree, history });
 

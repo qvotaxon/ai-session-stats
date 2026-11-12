@@ -13,8 +13,8 @@ import type { SessionsSearch } from "@/features/sessions/searchParams";
 import type { SortField } from "@/features/sessions/schemas";
 
 const SessionsPage = () => {
-  const search = useSearch({ from: "/" });
-  const navigate = useNavigate({ from: "/" });
+  const search = useSearch({ from: "/sessions" });
+  const navigate = useNavigate({ from: "/sessions" });
 
   const query = useSessionsList({
     page: search.page,

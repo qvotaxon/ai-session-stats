@@ -75,6 +75,7 @@ public static class SessionMappings
             s.CodeChanges is null ? null : new CodeChangesDto(s.CodeChanges.LinesAdded, s.CodeChanges.LinesRemoved, s.CodeChanges.FilesModified),
             [.. s.Timeline.Select(b => new TimelineBucketDto(b.BucketStart, b.ToolCalls, b.Hooks, b.Guards, b.Tokens))],
             s.Notes,
-            canContinue);
+            canContinue,
+            s.Harness);
     }
 }

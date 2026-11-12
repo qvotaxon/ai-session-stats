@@ -11,7 +11,7 @@ export const NotFound = ({ title = "Page not found", message }: { title?: string
       {message ?? "We could not find what you were looking for."}
     </p>
     <Button asChild>
-      <Link to="/" search={DEFAULT_SESSIONS_SEARCH}>
+      <Link to="/sessions" search={DEFAULT_SESSIONS_SEARCH}>
         Back to sessions
       </Link>
     </Button>

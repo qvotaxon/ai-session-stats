@@ -3,9 +3,12 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using SessionInsights.Application.Logs;
 using Shouldly;
 using SessionInsights.Infrastructure.Security;
 using Xunit;
@@ -129,6 +132,26 @@ public sealed class SecurityMiddlewareTests(SecurityFixture factory) : IClassFix
 
     [Fact]
     public async Task Api_without_token_is_unauthorized() => (await Status(Get("/api/v1/sessions"))).ShouldBe(HttpStatusCode.Unauthorized);
+
+    [Fact]
+    public async Task Application_log_requires_a_token() =>
+        (await Status(Get("/api/v1/logs"))).ShouldBe(HttpStatusCode.Unauthorized);
+
+    [Fact]
+    public async Task Application_log_contains_general_errors_and_is_not_cached()
+    {
+        using var client = factory.CreateClient();
+        var marker = "General application failure " + Guid.NewGuid().ToString("N");
+        factory.Services.GetRequiredService<ILogger<SecurityMiddlewareTests>>().LogError("{Diagnostic}", marker);
+        using var request = Get("/api/v1/logs", withToken: true);
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Headers.CacheControl.ShouldNotBeNull().NoStore.ShouldBeTrue();
+        var log = await response.Content.ReadFromJsonAsync<ApplicationLogDto>(TestContext.Current.CancellationToken);
+        log.ShouldNotBeNull().Content.ShouldContain(marker);
+        log.FileName.ShouldNotBeNull().ShouldStartWith("session-insights-");
+    }
 
     [Fact]
     public async Task Api_with_wrong_token_is_unauthorized()

@@ -34,7 +34,13 @@ const settingsRoute = createRoute({
   component: lazyRouteComponent(() => import("../pages/SettingsPage")),
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sessionDetailRoute, settingsRoute]);
+const applicationLogRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/application-log",
+  component: lazyRouteComponent(() => import("../pages/ApplicationLogPage")),
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, sessionDetailRoute, settingsRoute, applicationLogRoute]);
 
 export const createAppRouter = (history?: RouterHistory) => createRouter({ routeTree, history });
 

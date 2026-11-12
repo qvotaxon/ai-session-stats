@@ -68,13 +68,17 @@ internal sealed class SessionAccumulator
         Mark(at, EventKind.Tool, 1);
     }
 
-    public void Hook(string type, bool failed, long durationMs, DateTimeOffset? at, bool harnessEligible = true)
+    public void Hook(string type, bool failed, long? durationMs, DateTimeOffset? at, bool harnessEligible = true)
     {
-        var elapsed = at is { } time && durationMs >= 0 && durationMs <= (time - DateTimeOffset.MinValue).TotalMilliseconds
-            ? TimeSpan.FromMilliseconds(durationMs) : TimeSpan.Zero;
-        health.Add((at, at - elapsed, false, failed, harnessEligible));
+        DateTimeOffset? startedAt = null;
+        if (at is { } time && durationMs is { } duration && duration >= 0 && duration <= (time - DateTimeOffset.MinValue).TotalMilliseconds)
+        {
+            startedAt = time - TimeSpan.FromMilliseconds(duration);
+        }
+
+        health.Add((at, startedAt, false, failed, harnessEligible));
         hooks.TryGetValue(type, out var cur);
-        hooks[type] = (cur.Count + 1, cur.Failed + (failed ? 1 : 0), cur.Duration + Math.Max(0, durationMs));
+        hooks[type] = (cur.Count + 1, cur.Failed + (failed ? 1 : 0), cur.Duration + Math.Max(0, durationMs ?? 0));
         HookTotal++;
         if (failed)
         {

@@ -35,6 +35,8 @@ internal sealed class ClaudeSessionReader(
             return [];
         }
 
+
+
         var byId = new Dictionary<string, SessionFileGroup>(StringComparer.OrdinalIgnoreCase);
         foreach (var projectDir in fs.Directory.EnumerateDirectories(root))
         {
@@ -394,7 +396,10 @@ internal sealed class ClaudeSessionReader(
 
         var hookEvent = attachment.Str("hookEvent") ?? "unknown";
         var name = attachment.Str("hookName") ?? hookEvent;
-        var duration = attachment.Num("durationMs");
+        var durationValue = attachment.Get("durationMs");
+        long? duration = durationValue is { ValueKind: JsonValueKind.Number } value
+            ? value.TryGetInt64(out var milliseconds) ? milliseconds : (long)value.GetDouble()
+            : null;
 
         switch (type)
         {
@@ -434,6 +439,3 @@ internal sealed class ClaudeSessionReader(
         return true;
     }
 }
-
-
-

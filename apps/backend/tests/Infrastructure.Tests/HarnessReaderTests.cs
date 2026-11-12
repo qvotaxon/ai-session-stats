@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions.TestingHelpers;
 using System.Linq;
@@ -47,6 +48,21 @@ public sealed class HarnessReaderTests
     private static string ToolEnd(int minute, string id, bool failed = false) =>
         $$$"""{"type":"user","timestamp":"{{{Ts(minute)}}}","message":{"content":[{"type":"tool_result","tool_use_id":"{{{id}}}","is_error":{{{failed.ToString().ToLowerInvariant()}}}}]}}""";
 
+    private static string FailedHook(int minute, long? duration)
+    {
+        var attachment = new Dictionary<string, object?>
+        {
+            ["type"] = "hook_blocking_error",
+            ["hookEvent"] = "PreToolUse",
+        };
+        if (duration is { } milliseconds)
+        {
+            attachment["durationMs"] = milliseconds;
+        }
+
+        return System.Text.Json.JsonSerializer.Serialize(new { type = "attachment", timestamp = Ts(minute), attachment });
+    }
+
     private Session Claude(params string[] lines)
     {
         var id = NewId();
@@ -89,6 +105,21 @@ public sealed class HarnessReaderTests
         }
         var untimed = Activation(0, "0.26.0").Replace($"\"timestamp\":\"{Ts(0)}\",", "", StringComparison.Ordinal);
         Claude(untimed, ToolStart(1, "a"), ToolEnd(2, "a")).Harness.Activity.ShouldAllBe(a => a.Version == null);
+    }
+
+    [Fact]
+    public void Claude_hooks_with_missing_or_invalid_durations_remain_unattributed_and_counted()
+    {
+        var session = Claude(
+            Activation(0, "0.26.0"),
+            FailedHook(1, null),
+            FailedHook(2, -1));
+
+        session.Harness.Activity.ShouldAllBe(activity => activity.Version == null);
+        session.HookTotal.ShouldBe(3);
+        session.HookFailed.ShouldBe(2);
+        session.HookTypes.Single(hook => hook.Type == "PreToolUse").Count.ShouldBe(2);
+        session.HookTypes.Single(hook => hook.Type == "PreToolUse").Failed.ShouldBe(2);
     }
 
     [Fact]

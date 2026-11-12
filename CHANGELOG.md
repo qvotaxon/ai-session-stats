@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.6...v1.1.0) (2026-11-12)
+
+
+### Features
+
+* add a per-user Windows installer that keeps self-update working ([#19](https://github.com/qvotaxon/ai-session-stats/issues/19)) ([cd8770b](https://github.com/qvotaxon/ai-session-stats/commit/cd8770be3e35ff3244a3d02291902f1436db9f94))
+
+
+### Bug Fixes
+
+* prefer the .cmd shim when locating npm-installed CLIs ([#17](https://github.com/qvotaxon/ai-session-stats/issues/17)) ([4ea038f](https://github.com/qvotaxon/ai-session-stats/commit/4ea038fcea098fcddb5aa15f172dfe96517fa451))
+
 ## [1.0.6](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.5...v1.0.6) (2026-11-11)
 
 

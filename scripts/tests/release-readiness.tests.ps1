@@ -31,6 +31,7 @@ $script:calls = 0
 $script:sleeps = 0
 $script:apiError = $null
 $script:localError = $null
+$script:localVersion = '1.0.3'
 $releaseApi = 'https://api.github.com/repos/qvotaxon/ai-session-stats/releases/latest'
 $headers = @{ 'Cache-Control' = 'no-cache' }
 $ExpectedTag = 'v1.0.4'
@@ -39,7 +40,7 @@ function Invoke-RestMethod {
     param($Uri, $Headers, $TimeoutSec)
     if ($Uri -like 'http://127.0.0.1:*') {
         if ($script:localError) { Write-Error $script:localError; return }
-        return [pscustomobject]@{ version = '1.0.3' }
+        return [pscustomobject]@{ version = $script:localVersion }
     }
     if ($Headers['Cache-Control'] -ne 'no-cache') { throw 'Missing no-cache header.' }
     if ($script:apiError) {
@@ -105,6 +106,49 @@ $script:releases = @((New-Release 'v1.0.3' @()))
 $result = & $trayCheck 5180
 Assert (-not $result.Available) 'Tray offered the installed release.'
 
+foreach ($currentVersion in @('1.0.4-preview', '1.0.3-preview')) {
+    $script:localVersion = $currentVersion
+    $script:calls = 0
+    $script:releases = @($complete)
+    $result = & $trayCheck 5180
+    Assert ($result.Available -and $result.LatestTag -eq 'v1.0.4') "Tray did not offer stable from $currentVersion."
+    Assert ($result.CurrentVersion -eq $currentVersion) 'Tray hid the preview suffix.'
+}
+$script:localVersion = '1.0.5-preview'
+$script:calls = 0
+$result = & $trayCheck 5180
+Assert (-not $result.Available) 'Tray offered a downgrade from a newer preview.'
+$script:localVersion = '1.0.4-preview'
+$script:releases = @($incomplete)
+$script:calls = 0
+$result = & $trayCheck 5180
+Assert (-not $result.Available -and $result.CheckError -like '*not ready for update yet*') 'Tray offered an incomplete matching stable release to a preview.'
+$script:localVersion = '1.0.3'
+
+foreach ($kind in @('prerelease', 'draft', 'preview-tag')) {
+    $unsupported = New-Release 'v1.0.4' @($zip, $checksum)
+    if ($kind -eq 'preview-tag') {
+        $unsupported.tag_name = 'v1.0.4-preview'
+    } else {
+        $unsupported.$kind = $true
+    }
+    $script:releases = @($unsupported)
+    $script:calls = 0
+    $result = & $trayCheck 5180
+    Assert (-not $result.Available -and -not $result.LatestTag -and $result.CheckError) "Tray offered $kind to a stable install."
+    $script:localVersion = '1.0.3-preview'
+    $script:calls = 0
+    $result = & $trayCheck 5180
+    Assert (-not $result.Available -and $result.CheckError) "Tray offered $kind to a preview install."
+    $script:localVersion = '1.0.3'
+    $script:calls = 0
+    Assert-Throws { Get-ReleaseAssets } 'no longer the latest stable release'
+}
+
+$script:localVersion = '1.0.3-invalid'
+Assert-Throws { & $trayCheck 5180 } 'invalid version'
+$script:localVersion = '1.0.3'
+
 $zipPending = [pscustomobject]@{ name = $zip.name; state = 'new' }
 $script:calls = 0
 $script:releases = @((New-Release 'v1.0.4' @($zipPending, $checksum)))
@@ -123,7 +167,7 @@ Assert-Throws { Get-ReleaseAssets } '403'
 $runspace = [powershell]::Create()
 try {
     $mock = 'function Invoke-RestMethod {' + (Get-Command Invoke-RestMethod).Definition + '}'
-    $null = $runspace.AddScript($mock).AddScript('$script:apiError = ''{"message":"API rate limit exceeded."}''; $ErrorActionPreference = ''Continue''')
+    $null = $runspace.AddScript($mock).AddScript('$script:localVersion = ''1.0.3''; $script:apiError = ''{"message":"API rate limit exceeded."}''; $ErrorActionPreference = ''Continue''')
     $null = $runspace.AddScript($trayCheck.ToString()).AddArgument(5180)
     $handle = $runspace.BeginInvoke()
     $results = @($runspace.EndInvoke($handle))

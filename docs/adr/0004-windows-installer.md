@@ -10,7 +10,7 @@ Installing a release meant extracting the zip, copying `app\` to `%LOCALAPPDATA%
 
 ## Decision
 
-Each release also ships `SessionInsights-Setup.exe` (plus `.sha256`), built with Inno Setup in a Windows job of the release workflow from the already uploaded zip. The release is published only after all four assets exist.
+Each release also ships `SessionInsights-Setup.exe` (plus `.sha256`), built with a version- and checksum-pinned Inno Setup in a read-only Windows job from the workflow's archive artifact. A separate publishing job, gated by owner approval in the `release` environment, uploads all four assets before publishing. Build jobs do not receive release-write credentials.
 
 - Per-user, no admin (`PrivilegesRequired=lowest`), fixed folder `%LOCALAPPDATA%\SessionInsights\app`, no directory page. The updater and tray assume this folder.
 - Setup copies the same `app\` content as the zip, then runs the existing `install-task.ps1 -PublishedApp` and `install-tray.ps1`. Before copying it runs `uninstall-task.ps1` so an existing install is stopped and re-registered, which makes Setup safe to run over an existing install.

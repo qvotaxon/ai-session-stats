@@ -97,6 +97,7 @@ internal sealed class CopilotSessionReader(
         string? recap = null;
         DateTimeOffset? recapAt = null;
         DateTimeOffset? sessionStart = null;
+        string? cliVersion = null;
 
         using var stream = fs.File.OpenRead(eventsPath);
         foreach (var doc in JsonLines.Read(stream, WantsLine))
@@ -113,6 +114,7 @@ internal sealed class CopilotSessionReader(
                 {
                     case "session.start":
                         sessionStart = data.Time("startTime") ?? at;
+                        cliVersion = data.Str("copilotVersion");
                         break;
 
                     case "user.message":
@@ -205,6 +207,11 @@ internal sealed class CopilotSessionReader(
 
                     case "skill.invoked" or "skill.invoked_ref" when !inWindow:
                         acc.Skill(data.Str("name") ?? "unknown");
+                        if (HarnessEvidence.Copilot(data, at, cliVersion) is { } observation)
+                        {
+                            acc.HarnessObservations.Add(observation);
+                        }
+
                         break;
 
                     case "session.usage_record":
@@ -326,6 +333,7 @@ internal sealed class CopilotSessionReader(
             Cost = cost,
             CodeChanges = codeChanges,
             Timeline = acc.BuildTimeline(started, effectiveEnd < started ? started : effectiveEnd),
+            Harness = acc.BuildHarness(),
             Notes = notes,
             LooksLikeReportFork = string.Equals(firstHumanMessage, ReportConstants.Prompt, StringComparison.OrdinalIgnoreCase),
         };

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SessionInsights.Application.Common;
 using SessionInsights.Application.Logs;
+using SessionInsights.Application.Sessions;
 using SessionInsights.Infrastructure.Logs;
 using SessionInsights.Infrastructure.Reports;
 using SessionInsights.Infrastructure.Security;
@@ -24,6 +25,7 @@ public static class DependencyInjection
         services.AddSingleton<ISessionSourceReader, ClaudeSessionReader>();
         services.AddSingleton<IExcludedSessions, ExcludedSessionsStore>();
         services.AddSingleton<ISessionIndex, SessionIndex>();
+        services.AddSingleton<IHarnessInventory, HarnessInventory>();
         services.AddHostedService<SessionIndexWarmer>();
 
         services.AddSingleton<ReportActivityTracker>();

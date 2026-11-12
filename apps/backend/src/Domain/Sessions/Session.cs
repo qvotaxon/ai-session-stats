@@ -59,6 +59,8 @@ public sealed class Session
     public IReadOnlyList<TimelineBucket> Timeline { get; init; } = [];
     public IReadOnlyList<string> Notes { get; init; } = [];
 
+    public HarnessInfo Harness { get; init; } = HarnessInfo.Empty;
+
     /// <summary>True when the session is a report-run fork (first/last human message is the report prompt).</summary>
     public bool LooksLikeReportFork { get; init; }
 

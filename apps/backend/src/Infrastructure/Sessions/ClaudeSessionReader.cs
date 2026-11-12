@@ -122,7 +122,13 @@ internal sealed class ClaudeSessionReader(
                             break;
 
                         case "attachment":
-                            HandleAttachment(root.Get("attachment"), at, acc);
+                            var attachment = root.Get("attachment");
+                            if (isMainFile && HarnessEvidence.Claude(attachment, at, root.Str("version")) is { } observation)
+                            {
+                                acc.HarnessObservations.Add(observation);
+                            }
+
+                            HandleAttachment(attachment, at, acc, isMainFile);
                             break;
 
                         case "system" when root.Str("subtype") == "stop_hook_summary":
@@ -229,6 +235,7 @@ internal sealed class ClaudeSessionReader(
             Cost = null,
             CodeChanges = null,
             Timeline = acc.BuildTimeline(started, effectiveEnd < started ? started : effectiveEnd),
+            Harness = acc.BuildHarness(),
             Notes =
             [
                 "Claude Code does not expose premium requests, AIU cost or code-change totals; those are not available for this CLI.",
@@ -278,7 +285,7 @@ internal sealed class ClaudeSessionReader(
                 var name = use.Name ?? "unknown";
                 toolNameForDenial ??= name;
                 var duration = use.At is { } s && at is { } e ? (long)(e - s).TotalMilliseconds : 0;
-                acc.Tool(name, b.Bool("is_error") != true, duration, at);
+                acc.Tool(name, b.Bool("is_error") != true, duration, at, isMainFile, use.At);
             }
         }
 
@@ -377,7 +384,7 @@ internal sealed class ClaudeSessionReader(
         }
     }
 
-    private static void HandleAttachment(JsonElement? attachment, DateTimeOffset? at, SessionAccumulator acc)
+    private static void HandleAttachment(JsonElement? attachment, DateTimeOffset? at, SessionAccumulator acc, bool isMainFile)
     {
         var type = attachment.Str("type");
         if (type is null || !type.StartsWith("hook_", StringComparison.Ordinal))
@@ -394,7 +401,7 @@ internal sealed class ClaudeSessionReader(
             case "hook_success":
                 var exit = attachment.Get("exitCode") is { } e ? (e.ValueKind == JsonValueKind.String ? e.GetString() : e.ToString()) : "0";
                 var failed = exit is not null and not "0";
-                acc.Hook(hookEvent, failed, duration, at);
+                acc.Hook(hookEvent, failed, duration, at, isMainFile);
                 if (failed)
                 {
                     acc.Guard(GuardKind.HookFailure, name, at);
@@ -402,11 +409,11 @@ internal sealed class ClaudeSessionReader(
 
                 break;
             case "hook_blocking_error" or "hook_stopped_continuation":
-                acc.Hook(hookEvent, true, duration, at);
+                acc.Hook(hookEvent, true, duration, at, isMainFile);
                 acc.Guard(GuardKind.BlockedHook, name, at);
                 break;
             case "hook_non_blocking_error" or "hook_error_during_execution" or "hook_cancelled":
-                acc.Hook(hookEvent, true, duration, at);
+                acc.Hook(hookEvent, true, duration, at, isMainFile);
                 acc.Guard(GuardKind.HookFailure, name, at);
                 break;
         }

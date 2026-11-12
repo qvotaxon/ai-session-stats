@@ -20,6 +20,8 @@ internal sealed class SessionAccumulator
     private readonly Dictionary<string, int> skills = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> subagents = new(StringComparer.Ordinal);
     private readonly List<TimelineEvent> timeline = [];
+    private readonly List<(DateTimeOffset? At, DateTimeOffset? StartedAt, bool Tool, bool Failed, bool Eligible)> health = [];
+    public List<HarnessObservation> HarnessObservations { get; } = [];
 
     public DateTimeOffset? First { get; private set; }
     public DateTimeOffset? Last { get; private set; }
@@ -49,8 +51,9 @@ internal sealed class SessionAccumulator
         }
     }
 
-    public void Tool(string name, bool succeeded, long durationMs, DateTimeOffset? at)
+    public void Tool(string name, bool succeeded, long durationMs, DateTimeOffset? at, bool harnessEligible = true, DateTimeOffset? startedAt = null)
     {
+        health.Add((at, startedAt, true, !succeeded, harnessEligible));
         tools.TryGetValue(name, out var cur);
         tools[name] = (cur.Count + 1, cur.Failed + (succeeded ? 0 : 1), cur.Duration + Math.Max(0, durationMs));
         if (succeeded)
@@ -65,8 +68,11 @@ internal sealed class SessionAccumulator
         Mark(at, EventKind.Tool, 1);
     }
 
-    public void Hook(string type, bool failed, long durationMs, DateTimeOffset? at)
+    public void Hook(string type, bool failed, long durationMs, DateTimeOffset? at, bool harnessEligible = true)
     {
+        var elapsed = at is { } time && durationMs >= 0 && durationMs <= (time - DateTimeOffset.MinValue).TotalMilliseconds
+            ? TimeSpan.FromMilliseconds(durationMs) : TimeSpan.Zero;
+        health.Add((at, at - elapsed, false, failed, harnessEligible));
         hooks.TryGetValue(type, out var cur);
         hooks[type] = (cur.Count + 1, cur.Failed + (failed ? 1 : 0), cur.Duration + Math.Max(0, durationMs));
         HookTotal++;
@@ -94,6 +100,10 @@ internal sealed class SessionAccumulator
     }
 
     public void TokenEvent(DateTimeOffset? at, long tokens) => Mark(at, EventKind.Tokens, tokens);
+
+    public HarnessInfo BuildHarness() => new(
+        [.. HarnessObservations.OrderBy(o => o.At)],
+        HarnessEvidence.Attribute(HarnessObservations, health));
 
     private void Mark(DateTimeOffset? at, EventKind kind, long amount)
     {

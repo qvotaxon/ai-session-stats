@@ -13,15 +13,34 @@ import {
 export const AppLayout = () => (
   <div className="min-h-screen">
     <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
+      <div className="mx-auto flex min-h-14 max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2">
         <Link
           to="/"
-          search={DEFAULT_SESSIONS_SEARCH}
           className="flex items-center gap-2 font-semibold focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           <Activity className="size-5 text-primary" aria-hidden />
           Session Insights
         </Link>
+        <nav
+          aria-label="Main navigation"
+          className="order-last flex w-full items-center justify-center gap-1 sm:order-none sm:w-auto"
+        >
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/" activeProps={{ className: "bg-accent" }} activeOptions={{ exact: true }}>
+              Dashboard
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/sessions" search={DEFAULT_SESSIONS_SEARCH} activeProps={{ className: "bg-accent" }}>
+              Sessions
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/harness" activeProps={{ className: "bg-accent" }}>
+              Harness
+            </Link>
+          </Button>
+        </nav>
         <div className="flex items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

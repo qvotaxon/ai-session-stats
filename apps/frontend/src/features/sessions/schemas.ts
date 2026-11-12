@@ -34,6 +34,29 @@ export const sessionPageSchema = z.object({
 const nameCount = z.object({ name: z.string(), count });
 
 export const sessionDetailSchema = sessionSummarySchema.extend({
+  harness: z
+    .object({
+      observations: z.array(
+        z.object({
+          at: z.string().nullable(),
+          kind: z.enum(["activation", "invocation"]),
+          version: z.string().nullable(),
+          evidence: z.enum(["hookPath", "invocation", "unknown", "conflicting"]),
+          cliVersion: z.string().nullable(),
+        }),
+      ),
+      activity: z.array(
+        z.object({
+          version: z.string().nullable(),
+          cliVersion: z.string().nullable(),
+          toolCalls: z.number(),
+          toolFailures: z.number(),
+          hooks: z.number(),
+          hookFailures: z.number(),
+        }),
+      ),
+    })
+    .default({ observations: [], activity: [] }),
   recap: z.string().nullable().default(null),
   recapAt: z.string().nullable().default(null),
   tokens: z.object({
@@ -106,7 +129,13 @@ export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionPage = z.infer<typeof sessionPageSchema>;
 export type SessionDetail = z.infer<typeof sessionDetailSchema>;
 
-export const sortFieldSchema = z.enum(["lastActivityAt", "startedAt", "totalTokens", "toolCallCount", "durationSeconds"]);
+export const sortFieldSchema = z.enum([
+  "lastActivityAt",
+  "startedAt",
+  "totalTokens",
+  "toolCallCount",
+  "durationSeconds",
+]);
 export type SortField = z.infer<typeof sortFieldSchema>;
 export type SortDirection = "asc" | "desc";
 

@@ -24,10 +24,12 @@ public sealed class SessionInsightsOptions
     public TimeSpan IndexRefreshInterval { get; set; } = TimeSpan.FromSeconds(15);
 
     public string ResolveCopilotRoot() =>
-        !string.IsNullOrWhiteSpace(CopilotRoot) ? CopilotRoot : Path.Combine(UserProfile(), ".copilot", "session-state");
+        !string.IsNullOrWhiteSpace(CopilotRoot) ? CopilotRoot : Path.Combine(
+            FirstConfigured(CopilotHome, Environment.GetEnvironmentVariable("COPILOT_HOME")) ?? Path.Combine(UserProfile(), ".copilot"), "session-state");
 
     public string ResolveClaudeRoot() =>
-        !string.IsNullOrWhiteSpace(ClaudeRoot) ? ClaudeRoot : Path.Combine(UserProfile(), ".claude", "projects");
+        !string.IsNullOrWhiteSpace(ClaudeRoot) ? ClaudeRoot : Path.Combine(
+            FirstConfigured(ClaudeConfigDir, Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR")) ?? Path.Combine(UserProfile(), ".claude"), "projects");
 
     public string ResolveDataRoot() =>
         !string.IsNullOrWhiteSpace(DataRoot)
@@ -35,4 +37,7 @@ public sealed class SessionInsightsOptions
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SessionInsights");
 
     private static string UserProfile() => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+    private static string? FirstConfigured(string? configured, string? environment) =>
+        !string.IsNullOrWhiteSpace(configured) ? configured : !string.IsNullOrWhiteSpace(environment) ? environment : null;
 }

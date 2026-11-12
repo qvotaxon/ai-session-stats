@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SessionInsights.Domain.Sessions;
 
 namespace SessionInsights.Application.Sessions;
 
@@ -53,7 +54,8 @@ public sealed record SessionDetailDto(
     CodeChangesDto? CodeChanges,
     IReadOnlyList<TimelineBucketDto> Timeline,
     IReadOnlyList<string> Notes,
-    bool CanContinue);
+    bool CanContinue,
+    HarnessInfo Harness);
 
 public sealed record TokensDto(long Input, long Output, long CacheRead, long CacheWrite, long Reasoning, long Total);
 

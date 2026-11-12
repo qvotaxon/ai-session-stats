@@ -2,6 +2,7 @@ import { ArrowLeft, Info, Sparkles } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ReportPanel } from "@/features/reports/components/ReportPanel";
 import { ContinueButton } from "@/features/continue/components/ContinueButton";
 import { ReportStatusBadge } from "@/features/reports/components/ReportStatusBadge";
@@ -22,7 +23,7 @@ export const SessionDetailView = ({ session }: { session: SessionDetail }) => (
   <div className="space-y-6">
     <div>
       <Link
-        to="/"
+        to="/sessions"
         search={DEFAULT_SESSIONS_SEARCH}
         className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
@@ -50,7 +51,10 @@ export const SessionDetailView = ({ session }: { session: SessionDetail }) => (
       <Alert>
         <Sparkles className="size-4" aria-hidden />
         <AlertTitle>
-          Recap{session.recapAt ? <span className="ml-2 text-xs font-normal text-muted-foreground">{formatDateTime(session.recapAt)}</span> : null}
+          Recap
+          {session.recapAt ? (
+            <span className="ml-2 text-xs font-normal text-muted-foreground">{formatDateTime(session.recapAt)}</span>
+          ) : null}
         </AlertTitle>
         <AlertDescription className="whitespace-pre-line">{session.recap}</AlertDescription>
       </Alert>
@@ -71,6 +75,38 @@ export const SessionDetailView = ({ session }: { session: SessionDetail }) => (
     )}
 
     <KpiGrid session={session} />
+
+    <Card>
+      <CardHeader>
+        <CardTitle>MSDC harness evidence</CardTitle>
+        <CardDescription>
+          Observed versions, not the currently installed version. A session can span updates.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {session.harness.observations.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Harness version unknown. No supported evidence was recorded.</p>
+        ) : (
+          <ul className="max-h-72 space-y-2 overflow-auto text-sm">
+            {session.harness.observations.map((observation, index) => (
+              <li key={index}>
+                <span className="font-medium">{observation.version ?? "Unknown version"}</span>
+                {" · "}
+                {observation.kind}
+                {" · "}
+                {observation.evidence === "hookPath" ? "Indirect hook-path evidence" : observation.evidence}
+                {" · "}
+                {observation.at ? formatDateTime(observation.at) : "Timestamp unknown"}
+                {observation.cliVersion ? ` · CLI ${observation.cliVersion}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+        <Link to="/harness" className="mt-3 inline-block text-sm underline">
+          Explore harness health
+        </Link>
+      </CardContent>
+    </Card>
 
     <ReportPanel sessionId={session.id} />
 

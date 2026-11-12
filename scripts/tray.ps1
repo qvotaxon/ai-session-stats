@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Tray icon for Session Insights: click to open the dashboard, right-click for restart / quit.
+  Tray icon for Session Insights: click to open the dashboard, right-click for restart / quit (which also stops the server).
 #>
 [CmdletBinding()]
 param(
@@ -47,7 +47,7 @@ $checkForUpdates = $menu.Items.Add('Check for updates')
 $updateAvailable = $menu.Items.Add('Update available')
 $updateAvailable.Visible = $false
 $menu.Items.Add('-') | Out-Null
-$quit = $menu.Items.Add('Quit tray icon')
+$quit = $menu.Items.Add('Quit Session Insights')
 $notify.ContextMenuStrip = $menu
 
 $openAction = { Start-Process $url }
@@ -65,6 +65,13 @@ $restart.add_Click({
 })
 $quit.add_Click({
     $notify.Visible = $false
+    $timer.Stop()
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    # Stopping the task does not always end the server process, so end it by its path as well.
+    $serverExe = Join-Path $PSScriptRoot 'SessionInsights.Web.exe'
+    Get-Process -Name 'SessionInsights.Web' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -eq $serverExe } |
+        Stop-Process -Force -ErrorAction SilentlyContinue
     [System.Windows.Forms.Application]::Exit()
 })
 

@@ -72,6 +72,7 @@ jobs:
           cp scripts/tray.ps1 release/app/tray.ps1
           cp scripts/update-release.ps1 release/app/update-release.ps1
           cp scripts/uninstall-task.ps1 release/app/uninstall-task.ps1
+          cp scripts/start-session-insights.ps1 release/app/start-session-insights.ps1
           cp -R scripts release/scripts
       - name: Package release and checksum
         run: |

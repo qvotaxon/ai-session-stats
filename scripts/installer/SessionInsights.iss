@@ -36,6 +36,10 @@ Source: "{#SourceDir}\scripts\install-task.ps1"; Flags: dontcopy
 Source: "{#SourceDir}\scripts\install-tray.ps1"; Flags: dontcopy
 Source: "{#SourceDir}\scripts\tray.ps1"; Flags: dontcopy
 
+[Icons]
+; conhost --headless keeps PowerShell from flashing a console window, as in the scheduled tasks.
+Name: "{autoprograms}\Session Insights"; Filename: "{sys}\conhost.exe"; Parameters: "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""{app}\start-session-insights.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\SessionInsights.Web.exe"; Comment: "Start Session Insights and open the dashboard"
+
 [Run]
 Filename: "http://localhost:5180"; Description: "Open Session Insights"; Flags: shellexec postinstall skipifsilent
 

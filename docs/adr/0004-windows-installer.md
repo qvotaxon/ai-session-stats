@@ -14,12 +14,13 @@ Each release also ships `SessionInsights-Setup.exe` (plus `.sha256`), built with
 
 - Per-user, no admin (`PrivilegesRequired=lowest`), fixed folder `%LOCALAPPDATA%\SessionInsights\app`, no directory page. The updater and tray assume this folder.
 - Setup copies the same `app\` content as the zip, then runs the existing `install-task.ps1 -PublishedApp` and `install-tray.ps1`. Before copying it runs `uninstall-task.ps1` so an existing install is stopped and re-registered, which makes Setup safe to run over an existing install.
-- The uninstaller lives in `%LOCALAPPDATA%\SessionInsights\uninstall`, outside the folder the updater replaces. It runs `uninstall-task.ps1` (shipped inside `app\`), which now also removes the tray task, then deletes the app folder. User data (token, reports, logs) is kept.
+- The uninstaller lives in `%LOCALAPPDATA%\SessionInsights\uninstall`, outside the folder the updater replaces. It runs `uninstall-task.ps1` (shipped inside `app\`), which removes the server, tray and any leftover update tasks and processes plus temporary update scripts, then deletes the app folder, the Start Menu shortcut, and finally the whole `%LOCALAPPDATA%\SessionInsights` data folder (token, reports, logs, backups). Uninstall leaves no traces; the folder holds the running uninstaller, so a detached command removes it after Setup exits.
 - The updater still downloads and verifies the zip only. It never runs the installer.
 - The installer is unsigned for now, so Windows SmartScreen warns on first run.
 
 ## Consequences
 
+- Uninstalling deletes the user's reports and settings. Reinstalling starts clean.
 - Reinstalling an older Setup over a newer self-updated app downgrades it until the next update check.
 - Setup version in Add/Remove Programs is the version it was built from, not the version the updater later installs.
 - Signing the installer later only needs a signing step in the `installer` job.

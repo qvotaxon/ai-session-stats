@@ -30,9 +30,19 @@ if (Get-ScheduledTask -TaskName $trayTask -ErrorAction SilentlyContinue) {
     }
 }
 
+# The tray registers a temporary task and a temp copy of the updater for each update it applies.
+Get-ScheduledTask -TaskName 'SessionInsightsUpdate-*' -ErrorAction SilentlyContinue | ForEach-Object {
+    if ($PSCmdlet.ShouldProcess($_.TaskName, 'Unregister scheduled task')) {
+        Stop-ScheduledTask -TaskName $_.TaskName -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $_.TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+}
+Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Filter 'SessionInsightsUpdate-*.ps1' -File -ErrorAction SilentlyContinue |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+
 # Stopping the task does not always end the powershell child that hosts the tray icon.
 Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
     Where-Object { $_.CommandLine -like '*SessionInsights*tray.ps1*' } |
     ForEach-Object { if ($PSCmdlet.ShouldProcess("PID $($_.ProcessId)", 'Stop tray process')) { Stop-Process -Id $_.ProcessId -ErrorAction SilentlyContinue } }
 
-Write-Host "Removed. Data under $env:LOCALAPPDATA\SessionInsights (token, reports) is kept."
+Write-Host "Removed. Data under $env:LOCALAPPDATA\SessionInsights (token, reports) is kept unless you delete that folder."

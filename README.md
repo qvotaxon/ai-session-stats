@@ -3,7 +3,7 @@ A tool for visualizing ai sessions, their tool calls and other relevant performa
 
 ## Installing
 
-Download `SessionInsights-Setup.exe` from the [latest release](https://github.com/qvotaxon/ai-session-stats/releases/latest) and run it. No admin rights or .NET install are needed. It installs to `%LOCALAPPDATA%\SessionInsights\app`, starts the server and tray icon at every logon, and offers to open http://localhost:5180. The installer is not code-signed yet, so Windows SmartScreen may warn: choose **More info**, then **Run anyway**. Uninstall from Windows **Installed apps**; your data under `%LOCALAPPDATA%\SessionInsights` is kept.
+Download `SessionInsights-Setup.exe` from the [latest release](https://github.com/qvotaxon/ai-session-stats/releases/latest) and run it. No admin rights or .NET install are needed. It installs to `%LOCALAPPDATA%\SessionInsights\app`, starts the server and tray icon at every logon, and offers to open http://localhost:5180. The installer is not code-signed yet, so Windows SmartScreen may warn: choose **More info**, then **Run anyway**. Uninstall from Windows **Installed apps**: it removes everything, including the scheduled tasks, tray icon, Start Menu shortcut and all data (token, reports, logs) under `%LOCALAPPDATA%\SessionInsights`. **Quit Session Insights** in the tray menu stops the server and the tray icon; the Start Menu shortcut starts them again.
 
 Updates are applied by the tray, not by the installer, so you only need Setup once.
 

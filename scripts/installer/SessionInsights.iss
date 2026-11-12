@@ -71,6 +71,17 @@ begin
     Result := 'The running Session Insights could not be stopped. Close it and run Setup again.';
 end;
 
+// Uninstall leaves nothing behind: the data folder (token, reports, logs, backups) goes too. The folder holds this
+// running uninstaller, so it is removed by a detached command once Setup has exited.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+begin
+  if CurUninstallStep = usPostUninstall then
+    Exec(ExpandConstant('{cmd}'), '/c ping 127.0.0.1 -n 6 >nul & rd /s /q "' + ExpandConstant('{localappdata}\SessionInsights') + '"',
+      '', SW_HIDE, ewNoWait, ResultCode);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Args: String;

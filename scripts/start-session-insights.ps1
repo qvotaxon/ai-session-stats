@@ -2,7 +2,7 @@
 .SYNOPSIS
   Starts the Session Insights server and tray icon if they are not running, then opens the dashboard.
 .DESCRIPTION
-  Target of the Start Menu shortcut. Both parts normally start at logon; this brings them back after the tray icon was quit.
+  Target of the Start Menu shortcut. Both parts normally start at logon; this brings them back after Session Insights was quit.
 #>
 [CmdletBinding()]
 param(

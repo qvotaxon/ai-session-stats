@@ -1,5 +1,5 @@
 import { Link, Outlet } from "@tanstack/react-router";
-import { Activity, FileText, Settings } from "lucide-react";
+import { Activity, FileText, History, Settings } from "lucide-react";
 import { DEFAULT_SESSIONS_SEARCH } from "@/features/sessions/searchParams";
 import { ThemeToggle } from "@/common/theme/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,11 @@ export const AppLayout = () => (
               <DropdownMenuItem asChild>
                 <Link to="/application-log">
                   <FileText className="size-4" aria-hidden /> Application Log
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/changelog">
+                  <History className="size-4" aria-hidden /> Changelog
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>

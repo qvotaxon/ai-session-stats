@@ -8,7 +8,7 @@ import { formatDateTime, formatDuration } from "@/lib/format";
 import { useCancelReport, useDownloadReport, useGenerateReport, useReportContent } from "../hooks/useReports";
 import { useReportPanel } from "../hooks/useReportPanel";
 import type { ReportRun } from "../schemas";
-import { MarkdownView } from "./MarkdownView";
+import { MarkdownView } from "@/common/MarkdownView";
 import { ReportStatusBadge } from "./ReportStatusBadge";
 
 const runLabel = (run: ReportRun): string => {

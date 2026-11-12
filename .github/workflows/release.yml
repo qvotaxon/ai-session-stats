@@ -8,16 +8,35 @@ on:
     types: [opened, reopened, synchronize, labeled]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
+  release-authorization:
+    if: >-
+      github.repository == 'qvotaxon/ai-session-stats' &&
+      github.actor == 'qvotaxon' && github.triggering_actor == 'qvotaxon'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify owner-only release approval is configured
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$GH_REPO/environments/release" | jq -e '
+            .can_admins_bypass == false and
+            any(.protection_rules[];
+              .type == "required_reviewers" and .prevent_self_review == false and
+              (.reviewers | length) == 1 and
+              .reviewers[0].type == "User" and .reviewers[0].reviewer.login == "qvotaxon")'
+
   release-validation:
     runs-on: windows-latest
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Test release readiness
         shell: powershell
         run: |
@@ -25,15 +44,20 @@ jobs:
           ./scripts/tests/update-lock.tests.ps1
 
   release-please:
+    needs: release-authorization
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       pr: ${{ steps.release.outputs.pr }}
     steps:
       - id: release
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: release-please-config.json
@@ -43,14 +67,18 @@ jobs:
     needs: [release-please, release-validation]
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
     uses: ./.github/workflows/package-release.yml
+    permissions:
+      contents: write
+      pull-requests: read
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
       ref: ${{ needs.release-please.outputs.tag_name }}
 
   preview-metadata:
-    needs: [release-please, release-validation]
+    needs: [release-authorization, release-please, release-validation]
     if: >-
-      ${{ !cancelled() && needs.release-validation.result == 'success' &&
+      ${{ !cancelled() && needs.release-authorization.result == 'success' &&
+          needs.release-validation.result == 'success' &&
           ((github.event_name == 'push' && needs.release-please.result == 'success' && needs.release-please.outputs.pr != '') ||
            (github.event_name == 'pull_request' &&
             github.event.pull_request.head.repo.full_name == github.repository &&
@@ -88,6 +116,9 @@ jobs:
   preview:
     needs: preview-metadata
     uses: ./.github/workflows/package-release.yml
+    permissions:
+      contents: write
+      pull-requests: read
     with:
       tag: ${{ needs.preview-metadata.outputs.tag }}
       ref: ${{ needs.preview-metadata.outputs.ref }}

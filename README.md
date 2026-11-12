@@ -15,6 +15,10 @@ After installing a release and registering the tray icon, the tray checks for a 
 
 Developers updating from a source checkout should continue to use `scripts/update.ps1`.
 
+## Changelog
+
+Open **Changelog** from Settings or the header **Options** menu, or choose **Open changelog** from the tray context menu. The in-app `/changelog` page bundles the repository's `CHANGELOG.md` at build time, so release history is available offline and matches the installed build. It does not fetch newer release notes from GitHub; updating the app updates the bundled history.
+
 ## Debugging
 
 Open the header **Options** menu (gear icon) and choose **Application Log** to view the latest backend log file. Use **Refresh** after reproducing an issue and **Copy log** to copy the displayed diagnostics. The viewer shows at most the last 256 KiB of the latest `session-insights-*.log` file under `%LOCALAPPDATA%\SessionInsights\logs` (or the configured data root); older logs remain on disk. Logs can include local paths and session identifiers, so review them before sharing.

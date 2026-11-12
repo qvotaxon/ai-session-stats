@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Tray icon for Session Insights: click to open the dashboard, right-click for restart / quit (which also stops the server).
+  Tray icon for Session Insights: click to open the dashboard, right-click for changelog / restart / quit (which also stops the server).
 #>
 [CmdletBinding()]
 param(
@@ -40,6 +40,7 @@ $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $menu.ShowItemToolTips = $true
 $open = $menu.Items.Add('Open dashboard')
 $open.Font = New-Object System.Drawing.Font($open.Font, [System.Drawing.FontStyle]::Bold)
+$changelog = $menu.Items.Add('Open changelog')
 $restart = $menu.Items.Add('Restart server')
 $versionItem = $menu.Items.Add('Installed version: checking...')
 $versionItem.Enabled = $false
@@ -52,6 +53,7 @@ $notify.ContextMenuStrip = $menu
 
 $openAction = { Start-Process $url }
 $open.add_Click($openAction)
+$changelog.add_Click({ Start-Process "$url/changelog" })
 $notify.add_Click({ if ($_.Button -eq 'Left') { Start-Process $url } })
 $restart.add_Click({
     $notify.Icon = $downIcon

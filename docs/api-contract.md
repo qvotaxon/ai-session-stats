@@ -27,7 +27,7 @@ Copilot runs resume in place (no new session), and the report turn is excluded f
 `200 {"status":"Healthy"}`
 
 ### GET /version
-`200 {"version":"1.2.3"}` (the installed application version, without a `v` prefix).
+`200 {"version":"1.2.3"}` (the installed application version, without a `v` prefix or build metadata). Preview installs return the upcoming version with a `-preview` suffix, for example `1.2.3-preview`.
 
 ### GET /api/v1/sessions
 Query: `page` (default 1), `pageSize` (default 25, max 100), `source` (`copilot`|`claude`, optional), `search` (matches title/project/id, optional), `sort` (`lastActivityAt`|`startedAt`|`totalTokens`|`toolCallCount`|`durationSeconds`, default `lastActivityAt`, so a continued old session moves to the top), `direction` (`asc`|`desc`, default `desc`).

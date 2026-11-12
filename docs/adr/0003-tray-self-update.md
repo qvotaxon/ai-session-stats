@@ -8,6 +8,10 @@ Accepted
 
 The Windows tray checks the current application's public `/version` endpoint and compares it with the latest stable GitHub Release tag. It checks at startup, every four hours, and on demand. Prereleases are not considered.
 
+Release-please PR creation and updates also build a manual-install `vX.Y.Z-preview` GitHub prerelease from the PR's manifest version and exact head commit. Stable and preview builds share the packaging workflow. Preview tags and assets are refreshed in place, never marked latest, and published only after the archive, installer, and checksums are uploaded and the PR head is still current. The main-branch release workflow consumes release-please's PR output directly, since PR events created with `GITHUB_TOKEN` do not start workflows; PR events additionally cover direct edits to the release branch.
+
+The preview installer uses the same application identity and installation folder as stable Setup, replacing any existing installation while retaining user data. `/version` preserves `-preview`. The tray still queries only stable releases and permits a preview to update to its matching stable version or a newer stable version, but never offers previews or downgrades.
+
 The installed version is independent of the GitHub check: a release API failure leaves the local version visible and reports the remote error separately. The background runspace treats HTTP errors as terminating so GitHub rate limits are not masked by a later release-validation error.
 
 Tagged `vX.Y.Z` releases contain a self-contained `win-x64` publish, the built frontend, and the installation/update scripts. Self-contained publishing avoids requiring users to install a .NET runtime. The tray launches a copy of the installed updater script from the system temporary directory, so the updater can stop and replace the tray and server files independently.

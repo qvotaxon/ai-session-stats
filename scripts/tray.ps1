@@ -96,7 +96,7 @@ $script:updateCheckScript = {
     param($port)
     $ErrorActionPreference = 'Stop'
     $current = Invoke-RestMethod -Uri "http://127.0.0.1:$port/version" -TimeoutSec 5
-    if ($current.version -notmatch '^\d+\.\d+\.\d+$') {
+    if ($current.version -notmatch '^\d+\.\d+\.\d+(-preview)?$') {
         throw 'The installed application returned an invalid version.'
     }
 
@@ -115,9 +115,11 @@ $script:updateCheckScript = {
             throw 'GitHub did not return a supported stable release.'
         }
 
-        $currentVersion = [version]$current.version
+        $isPreview = $current.version.EndsWith('-preview')
+        $currentVersion = [version]($current.version -replace '-preview$', '')
         $latestVersion = [version]$tag.Substring(1)
-        if ($latestVersion -gt $currentVersion) {
+        $available = $latestVersion -gt $currentVersion -or ($isPreview -and $latestVersion -eq $currentVersion)
+        if ($available) {
             $assetNames = @($release.assets | Where-Object { $_.state -eq 'uploaded' } | ForEach-Object { $_.name })
             if ('SessionInsights-win-x64.zip' -notin $assetNames -or
                 'SessionInsights-win-x64.zip.sha256' -notin $assetNames) {
@@ -126,7 +128,7 @@ $script:updateCheckScript = {
         }
         $result.LatestVersion = $latestVersion.ToString(3)
         $result.LatestTag = $tag
-        $result.Available = ($latestVersion -gt $currentVersion)
+        $result.Available = $available
     } catch {
         $result.CheckError = $_.Exception.GetBaseException().Message
         if ($_.ErrorDetails.Message -match 'API rate limit exceeded') {

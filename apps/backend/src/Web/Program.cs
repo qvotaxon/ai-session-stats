@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net;
+using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -75,7 +76,8 @@ if (app.Environment.IsDevelopment())
 app.MapDefaultEndpoints();
 app.MapGet("/version", () => new
 {
-    version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0",
+    version = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!
+        .InformationalVersion.Split('+')[0],
 });
 app.MapControllers();
 

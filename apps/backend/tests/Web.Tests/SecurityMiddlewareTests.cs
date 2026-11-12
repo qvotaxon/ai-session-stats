@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -126,7 +127,8 @@ public sealed class SecurityMiddlewareTests(SecurityFixture factory) : IClassFix
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        var expectedVersion = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        var expectedVersion = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!
+            .InformationalVersion.Split('+')[0];
         body.ShouldBe($"{{\"version\":\"{expectedVersion}\"}}");
     }
 

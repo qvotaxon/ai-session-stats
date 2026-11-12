@@ -3,6 +3,8 @@ using System.IO.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SessionInsights.Application.Common;
+using SessionInsights.Application.Logs;
+using SessionInsights.Infrastructure.Logs;
 using SessionInsights.Infrastructure.Reports;
 using SessionInsights.Infrastructure.Security;
 using SessionInsights.Infrastructure.Sessions;
@@ -16,6 +18,7 @@ public static class DependencyInjection
     {
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IFileSystem, FileSystem>();
+        services.AddSingleton<IApplicationLog, ApplicationLogReader>();
 
         services.AddSingleton<ISessionSourceReader, CopilotSessionReader>();
         services.AddSingleton<ISessionSourceReader, ClaudeSessionReader>();

@@ -98,6 +98,12 @@ Storage: `%LOCALAPPDATA%\SessionInsights\reports\<sessionId>\v<version>.md` and 
 - `GET /api/v1/settings` → `200 { "terminal": "wt-pwsh", "terminals": [{ "id":"", "label":"", "available":true }] }`.
 - `PUT /api/v1/settings` body `{ "terminal": "<id>" }` → `200` same shape. `400` for an id outside the fixed set: `wt-pwsh`, `wt-powershell`, `wt-cmd`, `pwsh`, `powershell`, `cmd`. Stored in `%LOCALAPPDATA%\SessionInsights\settings.json`. A stored choice that is unavailable falls back to `wt-pwsh` at launch time.
 
+### Application log
+- `GET /api/v1/logs` → `200 { "fileName": "session-insights-20261112.log", "content": "...", "truncated": false }`.
+- Returns UTF-8 text from the latest backend log file under the configured data root, oldest-to-newest within that file, capped at its last 256 KiB. When truncated, the partial first line is omitted. No client-supplied paths are accepted.
+- No log file returns `{ "fileName": null, "content": "", "truncated": false }`. Read failures return ProblemDetails, not an empty log. Responses are marked `Cache-Control: no-store` and require the same API token as all other API endpoints.
+- Diagnostic text can contain local paths, session identifiers and exception details, but no raw CLI output is added for report runs. The UI links to this page only from **Options → Application Log**.
+
 ## Ownership
 - Backend agent owns: `apps/backend/**`, `Directory.*.props`, solution file, `docs/adr/**`, `scripts/**`, `.editorconfig`.
 - Frontend agent owns: `apps/frontend/**`, `pnpm-workspace.yaml`, root `package.json` if needed.

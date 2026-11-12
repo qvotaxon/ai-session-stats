@@ -215,6 +215,7 @@ internal sealed class ReportCoordinator : IReportCoordinator
 
             var cliName = run.Cli == SessionSource.Claude ? options.Value.ClaudeCliPath : options.Value.CopilotCliPath;
             var exe = locator.Locate(cliName) ?? throw new ReportFailure($"CLI '{cliName}' was not found.");
+            logger.LogInformation("Report run {RunId} using {Cli} resolved to {Executable}", runId, run.Cli, exe);
             var result = await processes.RunAsync(new ProcessSpec(exe, BuildArguments(run), session.Cwd, BuildEnvironment(run)), linked.Token);
 
             lock (gate)
@@ -275,6 +276,7 @@ internal sealed class ReportCoordinator : IReportCoordinator
         }
         catch (ReportFailure ex)
         {
+            logger.LogWarning("Report run {RunId} for {Cli} failed: {Reason}", runId, run.Cli, ex.Message);
             Finish(state, ReportStatus.Failed, clock.GetElapsedTime(started), null, ex.Message);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)

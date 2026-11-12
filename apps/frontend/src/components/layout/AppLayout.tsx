@@ -1,7 +1,14 @@
 import { Link, Outlet } from "@tanstack/react-router";
-import { Activity, Settings } from "lucide-react";
+import { Activity, FileText, Settings } from "lucide-react";
 import { DEFAULT_SESSIONS_SEARCH } from "@/features/sessions/searchParams";
 import { ThemeToggle } from "@/common/theme/ThemeToggle";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const AppLayout = () => (
   <div className="min-h-screen">
@@ -16,13 +23,25 @@ export const AppLayout = () => (
           Session Insights
         </Link>
         <div className="flex items-center gap-1">
-          <Link
-            to="/settings"
-            aria-label="Settings"
-            className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            <Settings className="size-4" aria-hidden />
-          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Options">
+                <Settings className="size-4" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link to="/settings">
+                  <Settings className="size-4" aria-hidden /> Settings
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/application-log">
+                  <FileText className="size-4" aria-hidden /> Application Log
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <ThemeToggle />
         </div>
       </div>

@@ -15,4 +15,8 @@ After installing a release and registering the tray icon, the tray checks for a 
 
 Developers updating from a source checkout should continue to use `scripts/update.ps1`.
 
+## Debugging
+
+Open the header **Options** menu (gear icon) and choose **Application Log** to view the latest backend log file. Use **Refresh** after reproducing an issue and **Copy log** to copy the displayed diagnostics. The viewer shows at most the last 256 KiB of the latest `session-insights-*.log` file under `%LOCALAPPDATA%\SessionInsights\logs` (or the configured data root); older logs remain on disk. Logs can include local paths and session identifiers, so review them before sharing.
+
 If GitHub's unauthenticated API rate limit is reached, wait for it to reset before checking again. This does not make the locally installed version unavailable. On older releases, dismiss all update error dialogs before retrying: those dialogs can keep the update lock held even after rollback has finished.

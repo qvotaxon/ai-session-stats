@@ -26,7 +26,7 @@ public sealed class HarnessReaderTests
         CopilotRoot = Path.Combine(root, "copilot"),
     });
 
-    private static string Activation(int minute, string? version, string reason = "startup") =>
+    private static string Activation(int minute, string? version, string reason = "startup", string? stdout = null) =>
         System.Text.Json.JsonSerializer.Serialize(new
         {
             type = "attachment",
@@ -37,7 +37,7 @@ public sealed class HarnessReaderTests
                 type = "hook_success",
                 hookEvent = "SessionStart",
                 hookName = $"SessionStart:{reason}",
-                stdout = version is null ? "no version" : $@"C:\plugins\msdc-harness\{version}\scripts\start",
+                stdout = stdout ?? (version is null ? "no version" : $@"C:\plugins\msdc-harness\{version}\scripts\start"),
                 durationMs = 0,
             },
         });
@@ -87,6 +87,43 @@ public sealed class HarnessReaderTests
         session.Harness.Activity.Single(a => a.Version is null).ToolCalls.ShouldBe(3);
         session.ToolCallTotal.ShouldBe(5);
         session.Harness.Observations.ShouldAllBe(o => o.CliVersion == "2.1.302");
+    }
+
+    [Theory]
+    [InlineData(@"scripts: C:\plugins\msdc-harness\0.26.1\scripts")]
+    [InlineData("scripts: /plugins/msdc-harness/0.26.1/scripts")]
+    [InlineData("""{"ctx":"scripts: C:\\plugins\\msdc-harness\\0.26.1\\scripts"}""")]
+    [InlineData("""{"ctx":"scripts: \/plugins\/msdc-harness\/0.26.1\/scripts"}""")]
+    public void Claude_reads_plain_and_json_escaped_hook_paths(string stdout)
+    {
+        var session = Claude(Activation(0, null, stdout: stdout), ToolStart(1, "a"), ToolEnd(2, "a", true));
+
+        var observation = session.Harness.Observations.Single();
+        observation.Version.ShouldBe("0.26.1");
+        observation.Evidence.ShouldBe("hookPath");
+        session.Harness.Activity.Single(a => a.Version == "0.26.1").ToolFailures.ShouldBe(1);
+        System.Text.Json.JsonSerializer.Serialize(session.Harness).ShouldNotContain("scripts");
+    }
+
+    [Fact]
+    public void Claude_json_escaped_versions_are_split_on_resume_and_conflicts_reset_attribution()
+    {
+        var startup = System.Text.Json.JsonSerializer.Serialize(new { ctx = @"C:\plugins\msdc-harness\0.26.0\scripts" });
+        var resume = System.Text.Json.JsonSerializer.Serialize(new { ctx = @"C:\plugins\msdc-harness\0.26.1\scripts" });
+        var conflicting = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            ctx = @"C:\plugins\msdc-harness\0.26.0\scripts C:\plugins\msdc-harness\0.26.1\scripts",
+        });
+        var session = Claude(
+            Activation(0, null, stdout: startup), ToolStart(1, "a"), ToolEnd(2, "a", true),
+            Activation(3, null, "resume", resume), ToolStart(4, "b"), ToolEnd(5, "b"),
+            Activation(6, null, "resume", conflicting), ToolStart(7, "c"), ToolEnd(8, "c", true));
+
+        session.Harness.Observations.Select(o => o.Version).ShouldBe(["0.26.0", "0.26.1", null]);
+        session.Harness.Observations.Last().Evidence.ShouldBe("conflicting");
+        session.Harness.Activity.Single(a => a.Version == "0.26.0").ToolFailures.ShouldBe(1);
+        session.Harness.Activity.Single(a => a.Version == "0.26.1").ToolCalls.ShouldBe(1);
+        session.Harness.Activity.Single(a => a.Version is null).ToolFailures.ShouldBe(1);
     }
 
     [Fact]

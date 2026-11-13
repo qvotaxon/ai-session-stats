@@ -87,7 +87,8 @@ SessionDetail also includes `harness`:
 
 Only the MSDC harness (`msdc-harness`, or qualified identity `msdc-harness@msdc-plugins`) is recognized.
 Claude observations come from `SessionStart` hook attachments: only a supported version token from a
-`msdc-harness/<version>/` path in `stdout` is retained. No hook stdout or paths are returned or persisted
+`msdc-harness/<version>/` path in `stdout` is retained. Both plain-text paths and JSON-escaped
+path separators inside JSON-valued stdout are supported. No hook stdout or paths are returned or persisted
 by this feature. This is **indirect evidence**, not a verified plugin activation record. Missing or
 conflicting versions reset attribution to unknown. Tool executions must start and finish strictly
 within a recorded activation window; same-boundary events, untimed events, and subagent activity

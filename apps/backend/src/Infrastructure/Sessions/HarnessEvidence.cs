@@ -13,7 +13,7 @@ internal static class HarnessEvidence
         @"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
     private static readonly Regex ClaudePath = new(
-        @"(?:^|[\\/])msdc-harness[\\/](?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)[\\/]",
+        @"(?:^|[\\/])msdc-harness[\\/]+(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)[\\/]+",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     public static string? Version(string? value) =>

@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0](https://github.com/qvotaxon/ai-session-stats/compare/v1.1.0...v1.2.0) (2026-11-13)
+
+
+### Features
+
+* add application log viewer and improve CLI discovery ([#20](https://github.com/qvotaxon/ai-session-stats/issues/20)) ([d697dee](https://github.com/qvotaxon/ai-session-stats/commit/d697deea5bc1efda267513d57ebca5a2a16fd345))
+* add dashboard and MSDC harness version insights ([#25](https://github.com/qvotaxon/ai-session-stats/issues/25)) ([5a5c1d8](https://github.com/qvotaxon/ai-session-stats/commit/5a5c1d84cc56244d4ca4da721efdfdf69c9f0a56))
+* add offline changelog page and tray navigation ([#22](https://github.com/qvotaxon/ai-session-stats/issues/22)) ([6e929a4](https://github.com/qvotaxon/ai-session-stats/commit/6e929a425227ed646d30c7822bf78b063a65e34b))
+* publish manually installable preview releases ([#23](https://github.com/qvotaxon/ai-session-stats/issues/23)) ([d458a0e](https://github.com/qvotaxon/ai-session-stats/commit/d458a0e9c059223d5d4cce8bc485b89d2614be78))
+
+
+### Bug Fixes
+
+* detect Claude harness versions in JSON-escaped hook output ([#26](https://github.com/qvotaxon/ai-session-stats/issues/26)) ([16bb2b2](https://github.com/qvotaxon/ai-session-stats/commit/16bb2b2750ec5dc61e2be96c239cbb87772fc139))
+* gate release publication behind owner approval ([#24](https://github.com/qvotaxon/ai-session-stats/issues/24)) ([76cc541](https://github.com/qvotaxon/ai-session-stats/commit/76cc541a85c5e368fd4b8443293fcbbe3ccd125f))
+
 ## [1.1.0](https://github.com/qvotaxon/ai-session-stats/compare/v1.0.6...v1.1.0) (2026-11-12)
 
 

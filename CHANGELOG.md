@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/qvotaxon/ai-session-stats/compare/v1.3.0...v1.4.0) (2026-11-18)
+
+
+### Features
+
+* show Claude subscription allowance ([#34](https://github.com/qvotaxon/ai-session-stats/issues/34)) ([9fa278d](https://github.com/qvotaxon/ai-session-stats/commit/9fa278dfaec81a16cc8313c90cef1093cdb308f0))
+
 ## [1.3.0](https://github.com/qvotaxon/ai-session-stats/compare/v1.2.0...v1.3.0) (2026-11-18)
 
 

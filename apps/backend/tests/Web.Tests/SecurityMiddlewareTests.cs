@@ -60,7 +60,13 @@ public sealed class SecurityFixture : WebApplicationFactory<Program>, IAsyncLife
     }
 }
 
-public sealed class SecurityMiddlewareTests(SecurityFixture factory) : IClassFixture<SecurityFixture>
+[CollectionDefinition("Security", DisableParallelization = true)]
+public sealed class SecurityCollection : ICollectionFixture<SecurityFixture>
+{
+}
+
+[Collection("Security")]
+public sealed class SecurityMiddlewareTests(SecurityFixture factory)
 {
     private HttpRequestMessage Get(string url, bool withToken = false, string? host = null, string? origin = null)
     {

@@ -17,7 +17,8 @@ using Xunit;
 
 namespace SessionInsights.Web.Tests;
 
-public sealed class StartupTests(SecurityFixture fixture) : IClassFixture<SecurityFixture>
+[Collection("Security")]
+public sealed class StartupTests(SecurityFixture fixture)
 {
     [Fact]
     public async Task Serves_the_page_while_initializing_and_defers_report_restoration_until_listening()

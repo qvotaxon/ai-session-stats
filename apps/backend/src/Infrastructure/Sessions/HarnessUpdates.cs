@@ -25,6 +25,13 @@ internal sealed class HarnessUpdates(
     TimeProvider clock,
     ILogger<HarnessUpdates> logger) : BackgroundService, IHarnessUpdates
 {
+    private const string Marketplace = "msdc-plugins";
+    private const string Plugin = "msdc-harness";
+    private static readonly string[] CopilotCatalogPaths =
+        ["marketplace.json", ".plugin/marketplace.json", ".github/plugin/marketplace.json", ".claude-plugin/marketplace.json"];
+    private static readonly string[] CopilotManifestPaths =
+        [".plugin/plugin.json", "plugin.json", ".github/plugin/plugin.json", ".claude-plugin/plugin.json"];
+
     private readonly Lock gate = new();
     private readonly Dictionary<string, HarnessUpdateDto> states = new()
     {
@@ -116,6 +123,7 @@ internal sealed class HarnessUpdates(
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(3));
         var token = timeout.Token;
+        string? copilotCache = null;
         try
         {
             var before = (await inventory.GetAsync(token, refresh: true)).Single(i => i.Source == source);
@@ -129,11 +137,16 @@ internal sealed class HarnessUpdates(
                 throw new InvalidOperationException("Automatic updates only support user-scoped plugin installations.");
             }
 
-            await CommandAsync(source, ["plugin", "marketplace", "update", "msdc-plugins"], token);
-            var latest = await LatestAsync(source, token);
+            if (source == "copilot")
+            {
+                // A fresh cache lets Copilot resolve the registered source and ref without guessing its checkout name.
+                copilotCache = fs.Directory.CreateTempSubdirectory("session-insights-copilot-").FullName;
+            }
+            await CommandAsync(source, ["plugin", "marketplace", "update", Marketplace], token, copilotCache);
+            var latest = await LatestAsync(source, copilotCache, token);
             if (install)
             {
-                await CommandAsync(source, ["plugin", "update", "msdc-harness@msdc-plugins"], token);
+                await CommandAsync(source, ["plugin", "update", $"{Plugin}@{Marketplace}"], token, copilotCache);
                 var after = (await inventory.GetAsync(token, refresh: true)).Single(i => i.Source == source);
                 if (after.Status != "installed" || after.Installations.Count == 0 ||
                     after.Installations.Any(i => Compare(i.Version, latest) < 0))
@@ -167,6 +180,17 @@ internal sealed class HarnessUpdates(
             var message = ex is InvalidOperationException ? ex.Message : $"Could not read the marketplace ({ex.GetType().Name}).";
             Fail(source, install, message);
         }
+        finally
+        {
+            if (copilotCache is not null)
+            {
+                try { fs.Directory.Delete(copilotCache, recursive: true); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    logger.LogWarning("Could not remove the temporary Copilot marketplace cache ({ErrorType}).", ex.GetType().Name);
+                }
+            }
+        }
     }
 
     private void Fail(string source, bool install, string message)
@@ -187,7 +211,7 @@ internal sealed class HarnessUpdates(
         }
     }
 
-    private async Task<string> CommandAsync(string source, string[] arguments, CancellationToken token)
+    private async Task<string> CommandAsync(string source, string[] arguments, CancellationToken token, string? copilotCache = null)
     {
         var executable = locator.Locate(source == "claude" ? options.Value.ClaudeCliPath : options.Value.CopilotCliPath)
             ?? throw new InvalidOperationException("CLI executable was not found.");
@@ -200,6 +224,10 @@ internal sealed class HarnessUpdates(
         {
             environment["COPILOT_HOME"] = options.Value.CopilotHome;
         }
+        if (copilotCache is not null)
+        {
+            environment["COPILOT_CACHE_HOME"] = copilotCache;
+        }
         var result = await processes.RunAsync(new ProcessSpec(executable, arguments, AppContext.BaseDirectory, environment), token);
         if (result.ExitCode != 0)
         {
@@ -208,13 +236,15 @@ internal sealed class HarnessUpdates(
         return result.StdOut;
     }
 
-    private async Task<string> LatestAsync(string source, CancellationToken token)
+    private async Task<string> LatestAsync(string source, string? copilotCache, CancellationToken token)
     {
-        string catalog;
-        string? marketplaceRoot = null;
-        if (source == "copilot")
+        string? version;
+        if (copilotCache is not null)
         {
-            catalog = await CommandAsync(source, ["plugin", "marketplace", "browse", "msdc-plugins", "--json"], token);
+            var browse = await CommandAsync(source, ["plugin", "marketplace", "browse", Marketplace, "--json"], token, copilotCache);
+            using var json = JsonDocument.Parse(browse);
+            // Copilot's browse projection can omit version even when the catalog declares it.
+            version = HarnessEntry(json.RootElement).Str("version") ?? await CopilotCatalogVersionAsync(copilotCache, token);
         }
         else
         {
@@ -222,33 +252,22 @@ internal sealed class HarnessUpdates(
                 .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
                 ?? fs.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
             using var known = JsonDocument.Parse(await fs.File.ReadAllTextAsync(fs.Path.Combine(home, "plugins", "known_marketplaces.json"), token));
-            marketplaceRoot = known.RootElement.Get("msdc-plugins").Str("installLocation")
+            var marketplaceRoot = known.RootElement.Get(Marketplace).Str("installLocation")
                 ?? throw new InvalidOperationException("The registered Claude marketplace has no local catalog.");
-            catalog = await fs.File.ReadAllTextAsync(fs.Path.Combine(marketplaceRoot, ".claude-plugin", "marketplace.json"), token);
-        }
-        using var json = JsonDocument.Parse(catalog);
-        var plugins = json.RootElement.ValueKind == JsonValueKind.Array ? json.RootElement : json.RootElement.Get("plugins");
-        if (plugins is not { ValueKind: JsonValueKind.Array } array)
-        {
-            throw new InvalidOperationException("Marketplace returned an unsupported catalog structure.");
-        }
-        var matches = array.EnumerateArray().Where(p => ((JsonElement?)p).Str("name") == "msdc-harness").ToArray();
-        if (matches.Length != 1)
-        {
-            throw new InvalidOperationException("The marketplace must contain exactly one MSDC harness entry.");
-        }
-        JsonElement? plugin = matches[0];
-        var version = plugin.Str("version");
-        if (version is null && marketplaceRoot is not null && plugin.Str("source") is { } path && path.StartsWith("./", StringComparison.Ordinal))
-        {
-            var root = fs.Path.GetFullPath(marketplaceRoot);
-            var directory = fs.Path.GetFullPath(fs.Path.Combine(root, path));
-            if (!directory.StartsWith(root + fs.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            using var catalog = await ReadJsonAsync(fs.Path.Combine(marketplaceRoot, ".claude-plugin", "marketplace.json"), token);
+            var plugin = HarnessEntry(catalog.RootElement);
+            version = plugin.Str("version");
+            if (version is null && plugin.Str("source") is { } path && path.StartsWith("./", StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("The plugin manifest must be inside its marketplace.");
+                var root = fs.Path.GetFullPath(marketplaceRoot);
+                var directory = fs.Path.GetFullPath(fs.Path.Combine(root, path));
+                if (!directory.StartsWith(root + fs.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("The plugin manifest must be inside its marketplace.");
+                }
+                using var manifest = await ReadJsonAsync(fs.Path.Combine(directory, ".claude-plugin", "plugin.json"), token);
+                version = ((JsonElement?)manifest.RootElement).Str("version");
             }
-            using var manifest = JsonDocument.Parse(await fs.File.ReadAllTextAsync(fs.Path.Combine(directory, ".claude-plugin", "plugin.json"), token));
-            version = ((JsonElement?)manifest.RootElement).Str("version");
         }
         if (version is null || !Version.TryParse(version, out var stable) || stable.Build < 0 || stable.Revision >= 0)
         {
@@ -256,6 +275,112 @@ internal sealed class HarnessUpdates(
         }
         return version;
     }
+
+    private static JsonElement? HarnessEntry(JsonElement catalog)
+    {
+        var plugins = catalog.ValueKind == JsonValueKind.Array ? catalog : catalog.Get("plugins");
+        if (plugins is not { ValueKind: JsonValueKind.Array } array)
+        {
+            throw new InvalidOperationException("Marketplace returned an unsupported catalog structure.");
+        }
+        var matches = array.EnumerateArray().Where(p => ((JsonElement?)p).Str("name") == Plugin).ToArray();
+        if (matches.Length != 1)
+        {
+            throw new InvalidOperationException("The marketplace must contain exactly one MSDC harness entry.");
+        }
+        return matches[0];
+    }
+
+    private async Task<string?> CopilotCatalogVersionAsync(string cache, CancellationToken token)
+    {
+        var marketplaces = fs.Path.Combine(cache, "marketplaces");
+        var pinned = fs.Path.Combine(marketplaces, "_pinned");
+        var roots = CheckoutDirectories(marketplaces).Where(path => path != pinned).Concat(CheckoutDirectories(pinned)).ToArray();
+        if (roots.Length == 0)
+        {
+            // Directory marketplaces are read in place and do not produce a checkout.
+            var list = await CommandAsync("copilot", ["plugin", "marketplace", "list", "--json"], token, cache);
+            using var known = JsonDocument.Parse(list);
+            if (known.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                const string localPrefix = "Local: ";
+                roots = known.RootElement.EnumerateArray().Select(entry => (JsonElement?)entry)
+                    .Where(entry => entry.Str("name") == Marketplace)
+                    .Select(entry => entry.Str("source"))
+                    .OfType<string>()
+                    .Where(source => source.StartsWith(localPrefix, StringComparison.Ordinal))
+                    .Select(source => source[localPrefix.Length..])
+                    .Where(fs.Path.IsPathFullyQualified)
+                    .ToArray();
+            }
+        }
+        var catalogs = roots.Select(root => (Root: root, Path: FindMarketplaceFile(root, CopilotCatalogPaths)))
+            .Where(catalog => catalog.Path is not null).ToArray();
+        if (catalogs.Length != 1)
+        {
+            throw new InvalidOperationException("Could not locate the refreshed Copilot marketplace catalog.");
+        }
+        var (marketplaceRoot, catalogPath) = catalogs[0];
+        using var catalog = await ReadJsonAsync(catalogPath!, token);
+        if (((JsonElement?)catalog.RootElement).Str("name") != Marketplace)
+        {
+            throw new InvalidOperationException("The refreshed Copilot catalog did not match the registered marketplace.");
+        }
+        var plugin = HarnessEntry(catalog.RootElement);
+        if (plugin.Str("version") is { } version) { return version; }
+        if (plugin.Str("source") is not { Length: > 0 } path || fs.Path.IsPathRooted(path)) { return null; }
+        if (FindMarketplaceFile(marketplaceRoot, [fs.Path.Combine(path, "plugin.json")]) is { } rootManifestPath)
+        {
+            using var rootManifest = await ReadJsonAsync(rootManifestPath, token);
+            if (IsAgentPluginsManifest(rootManifest.RootElement))
+            {
+                return ((JsonElement?)rootManifest.RootElement).Str("version");
+            }
+        }
+        if (FindMarketplaceFile(marketplaceRoot, CopilotManifestPaths.Select(p => fs.Path.Combine(path, p))) is not { } manifestPath)
+        {
+            return null;
+        }
+        using var manifest = await ReadJsonAsync(manifestPath, token);
+        return ((JsonElement?)manifest.RootElement).Str("version");
+    }
+
+    private static bool IsAgentPluginsManifest(JsonElement manifest) =>
+        ((JsonElement?)manifest).Str("$schema") is
+            "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json" or
+            "https://agent-plugins.org/schemas/1.1.0/plugin.schema.json";
+
+    private IEnumerable<string> CheckoutDirectories(string path) =>
+        fs.Directory.Exists(path) ? fs.Directory.EnumerateDirectories(path) : [];
+
+    private string? FindMarketplaceFile(string root, IEnumerable<string> candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            var file = fs.Path.GetFullPath(fs.Path.Combine(root, candidate));
+            var relative = fs.Path.GetRelativePath(root, file);
+            var parts = relative.Split(fs.Path.DirectorySeparatorChar);
+            if (fs.Path.IsPathRooted(relative) || parts[0] == "..")
+            {
+                throw new InvalidOperationException("The plugin manifest must be inside its marketplace.");
+            }
+            if (!fs.File.Exists(file)) { continue; }
+            var current = root;
+            foreach (var part in parts)
+            {
+                current = fs.Path.Combine(current, part);
+                if ((fs.File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new InvalidOperationException("The marketplace catalog and plugin manifest cannot use symbolic links.");
+                }
+            }
+            return file;
+        }
+        return null;
+    }
+
+    private async Task<JsonDocument> ReadJsonAsync(string path, CancellationToken token) =>
+        JsonDocument.Parse(await fs.File.ReadAllTextAsync(path, token));
 
     private static int Compare(string installed, string latest)
     {

@@ -198,6 +198,11 @@ memory until application restart. Clients use `completedAt` to deduplicate compl
 and refresh inventory, and `completionStatus`/`completionError` for the outcome, not the current
 maintenance status/error.
 
+If Copilot's marketplace browse output omits the plugin version, the check reads the refreshed
+registered catalog from a temporary CLI cache (or the registered local directory). It uses the
+harness entry's version, falling back to the plugin manifest for a plugin bundled with the
+marketplace. Checking does not install or update the plugin.
+
 ### Reports
 ReportRun:
 ```json

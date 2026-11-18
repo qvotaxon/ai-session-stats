@@ -329,6 +329,14 @@ internal sealed class HarnessUpdates(
         var plugin = HarnessEntry(catalog.RootElement);
         if (plugin.Str("version") is { } version) { return version; }
         if (plugin.Str("source") is not { Length: > 0 } path || fs.Path.IsPathRooted(path)) { return null; }
+        if (FindMarketplaceFile(marketplaceRoot, [fs.Path.Combine(path, "plugin.json")]) is { } rootManifestPath)
+        {
+            using var rootManifest = await ReadJsonAsync(rootManifestPath, token);
+            if (IsAgentPluginsManifest(rootManifest.RootElement))
+            {
+                return ((JsonElement?)rootManifest.RootElement).Str("version");
+            }
+        }
         if (FindMarketplaceFile(marketplaceRoot, CopilotManifestPaths.Select(p => fs.Path.Combine(path, p))) is not { } manifestPath)
         {
             return null;
@@ -336,6 +344,11 @@ internal sealed class HarnessUpdates(
         using var manifest = await ReadJsonAsync(manifestPath, token);
         return ((JsonElement?)manifest.RootElement).Str("version");
     }
+
+    private static bool IsAgentPluginsManifest(JsonElement manifest) =>
+        ((JsonElement?)manifest).Str("$schema") is
+            "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json" or
+            "https://agent-plugins.org/schemas/1.1.0/plugin.schema.json";
 
     private IEnumerable<string> CheckoutDirectories(string path) =>
         fs.Directory.Exists(path) ? fs.Directory.EnumerateDirectories(path) : [];

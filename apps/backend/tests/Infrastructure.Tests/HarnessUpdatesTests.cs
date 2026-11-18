@@ -18,15 +18,17 @@ namespace SessionInsights.Infrastructure.Tests;
 public sealed class HarnessUpdatesTests
 {
     [Theory]
-    [InlineData("remote", ".github/plugin/marketplace.json", "./plugins/harness", "0.29.0", null, null)]
-    [InlineData("pinned", ".claude-plugin/marketplace.json", "plugins/harness", null, "0.28.0", null)]
-    [InlineData("local", "marketplace.json", "./", null, "0.29.0", null)]
-    [InlineData("remote", "marketplace.json", "./plugins/harness", "0.29.0-rc.1", "0.29.0",
+    [InlineData("remote", ".github/plugin/marketplace.json", "./plugins/harness", "0.29.0", null, null, null)]
+    [InlineData("pinned", ".claude-plugin/marketplace.json", "plugins/harness", null, "0.28.0", null, null)]
+    [InlineData("local", "marketplace.json", "./", null, "0.29.0", null, null)]
+    [InlineData("remote", "marketplace.json", "./plugins/harness", "0.29.0-rc.1", "0.29.0", null,
         "The marketplace did not provide a supported stable plugin version.")]
-    [InlineData("remote", "marketplace.json", "../outside", null, "0.29.0",
+    [InlineData("remote", "marketplace.json", "../outside", null, "0.29.0", null,
         "The plugin manifest must be inside its marketplace.")]
+    [InlineData("remote", "marketplace.json", "./plugins/harness", null, "0.28.0", "0.29.0", null)]
     public async Task Copilot_reads_refreshed_metadata_when_browse_omits_version(
-        string registration, string catalogPath, string path, string? catalogVersion, string? manifestVersion, string? error)
+        string registration, string catalogPath, string path, string? catalogVersion, string? manifestVersion,
+        string? rootManifestVersion, string? error)
     {
         var token = TestContext.Current.CancellationToken;
         var fs = new MockFileSystem();
@@ -71,6 +73,11 @@ public sealed class HarnessUpdatesTests
                     fs.AddFile(fs.Path.GetFullPath(fs.Path.Combine(root, path, ".claude-plugin", "plugin.json")),
                         new MockFileData($$"""{"name":"msdc-harness","version":"{{manifestVersion}}"}"""));
                 }
+                if (rootManifestVersion is not null)
+                {
+                    fs.AddFile(fs.Path.GetFullPath(fs.Path.Combine(root, path, "plugin.json")),
+                        new MockFileData($$"""{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"msdc-harness","version":"{{rootManifestVersion}}"}"""));
+                }
                 return new ProcessResult(0, "", "");
             }
             commandCache.ShouldBe(cache);
@@ -92,7 +99,7 @@ public sealed class HarnessUpdatesTests
         {
             await WaitForAsync(() => State().Status is "checked" or "error", token);
             var state = State();
-            var expectedVersion = error is null ? catalogVersion ?? manifestVersion : null;
+            var expectedVersion = error is null ? catalogVersion ?? rootManifestVersion ?? manifestVersion : null;
             state.Status.ShouldBe(error is null ? "checked" : "error");
             state.Error.ShouldBe(error);
             state.LatestVersion.ShouldBe(expectedVersion);

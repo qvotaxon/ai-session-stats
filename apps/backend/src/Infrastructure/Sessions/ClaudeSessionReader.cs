@@ -80,7 +80,7 @@ internal sealed class ClaudeSessionReader(
     private Session? ParseCore(SessionFileGroup group, DateTimeOffset now)
     {
         var acc = new SessionAccumulator();
-        var skillSignals = new List<SkillSignal>();
+        var skillPrompts = new List<SkillPrompt>();
         var messages = new Dictionary<string, (string Model, TokenUsage Tokens, DateTimeOffset? At, bool Main)>(StringComparer.Ordinal);
         var toolUses = new Dictionary<string, (string Name, DateTimeOffset? At)>(StringComparer.Ordinal);
         var seenResults = new HashSet<string>(StringComparer.Ordinal);
@@ -110,7 +110,7 @@ internal sealed class ClaudeSessionReader(
                                 cwd ??= root.Str("cwd");
                             }
 
-                            HandleUser(root, at, isMainFile, acc, toolUses, seenResults, skillSignals, ref firstHuman, ref firstTitleSource, ref lastHuman, ref lastHumanEntrypoint, ref humanTurns);
+                            HandleUser(root, at, isMainFile, acc, toolUses, seenResults, skillPrompts, ref firstHuman, ref firstTitleSource, ref lastHuman, ref lastHumanEntrypoint, ref humanTurns);
                             break;
 
                         case "assistant":
@@ -229,7 +229,7 @@ internal sealed class ClaudeSessionReader(
             SubagentTotal = acc.SubagentCount,
             SubagentTypes = acc.SubagentCounts(),
             Skills = acc.SkillCounts(),
-            SkillSignals = skillSignals,
+            SkillPrompts = skillPrompts,
             UserTurns = humanTurns,
             AssistantTurns = messages.Values.Count(m => m.Main),
             ApiRequestCount = messages.Count,
@@ -256,7 +256,7 @@ internal sealed class ClaudeSessionReader(
         SessionAccumulator acc,
         Dictionary<string, (string Name, DateTimeOffset? At)> toolUses,
         HashSet<string> seenResults,
-        List<SkillSignal> skillSignals,
+        List<SkillPrompt> skillPrompts,
         ref string? firstHuman,
         ref string? firstTitleSource,
         ref string? lastHuman,
@@ -328,10 +328,7 @@ internal sealed class ClaudeSessionReader(
         if (!string.Equals(text, ReportConstants.Prompt, StringComparison.OrdinalIgnoreCase))
         {
             humanTurns++;
-            if (SkillWorkflow.Detect(text, at) is { } signal)
-            {
-                skillSignals.Add(signal);
-            }
+            skillPrompts.Add(new SkillPrompt(text, at));
         }
     }
 

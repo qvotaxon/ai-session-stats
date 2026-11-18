@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace SessionInsights.Domain.Sessions;
 
-/// <summary>A parsed session. Holds metrics only: never prompt, response, tool arguments or tool output.</summary>
+/// <summary>A parsed session. Prompt text is held in memory for consent-based local skill analysis and is never returned by the API.</summary>
 public sealed class Session
 {
     public const int MaxTitleLength = 120;
@@ -46,7 +46,7 @@ public sealed class Session
     public int SubagentTotal { get; init; }
     public IReadOnlyList<NamedCount> SubagentTypes { get; init; } = [];
     public IReadOnlyList<NamedCount> Skills { get; init; } = [];
-    public IReadOnlyList<SkillSignal> SkillSignals { get; init; } = [];
+    public IReadOnlyList<SkillPrompt> SkillPrompts { get; init; } = [];
 
     public int UserTurns { get; init; }
     public int AssistantTurns { get; init; }

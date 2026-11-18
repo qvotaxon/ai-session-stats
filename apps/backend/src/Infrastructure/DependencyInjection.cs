@@ -24,6 +24,7 @@ public static class DependencyInjection
 
         services.AddSingleton<ISessionSourceReader, CopilotSessionReader>();
         services.AddSingleton<ISessionSourceReader, ClaudeSessionReader>();
+        services.AddSingleton<ISkillAnalyzer, SkillAnalyzer>();
         services.AddSingleton<IExcludedSessions, ExcludedSessionsStore>();
         services.AddSingleton<ISessionIndex, SessionIndex>();
         services.AddSingleton<IHarnessInventory, HarnessInventory>();

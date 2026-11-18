@@ -42,16 +42,26 @@ internal sealed class ProcessRunner : IProcessRunner
 
         using var process = new Process { StartInfo = info };
         process.Start();
-        process.StandardInput.Close();
 
         var stdout = ReadCappedAsync(process.StandardOutput);
         var stderr = ReadCappedAsync(process.StandardError);
 
         try
         {
+            if (spec.StandardInput is not null)
+            {
+                await process.StandardInput.WriteAsync(spec.StandardInput.AsMemory(), cancellationToken);
+            }
+
+            process.StandardInput.Close();
             await process.WaitForExitAsync(cancellationToken);
         }
         catch (OperationCanceledException)
+        {
+            KillTree(process);
+            throw;
+        }
+        catch (IOException)
         {
             KillTree(process);
             throw;

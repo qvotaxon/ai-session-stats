@@ -77,7 +77,7 @@ internal sealed class CopilotSessionReader(
         var eventsPath = group.Files[0];
         var workspace = ReadWorkspace(group.Files.Skip(1).FirstOrDefault());
         var acc = new SessionAccumulator();
-        var skillSignals = new List<SkillSignal>();
+        var skillPrompts = new List<SkillPrompt>();
 
         var shutdown = new ModelAggregate();
         var pending = new ModelAggregate();
@@ -131,10 +131,11 @@ internal sealed class CopilotSessionReader(
                             inWindow = false;
                             firstUserMessage ??= content;
                             acc.UserTurns++;
-                            if (SkillWorkflow.Detect(content, at) is { } signal)
+                            if (!string.IsNullOrWhiteSpace(content))
                             {
-                                skillSignals.Add(signal);
+                                skillPrompts.Add(new SkillPrompt(content, at));
                             }
+
                         }
 
                         break;
@@ -331,7 +332,7 @@ internal sealed class CopilotSessionReader(
             SubagentTotal = acc.SubagentCount,
             SubagentTypes = acc.SubagentCounts(),
             Skills = acc.SkillCounts(),
-            SkillSignals = skillSignals,
+            SkillPrompts = skillPrompts,
             UserTurns = acc.UserTurns,
             AssistantTurns = acc.AssistantTurns,
             ApiRequestCount = shutdown.Entries.Sum(e => e.Requests) + pendingRequests,

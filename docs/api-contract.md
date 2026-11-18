@@ -28,27 +28,35 @@ Returns `[{ "id": "opaque string", "name": "string", "sessionCount": 0 }]` from 
 listable session index. Project identity is the recorded working directory, not the display
 name; the directory itself is not returned.
 
-### GET /api/v1/evolve/analysis
-Pass exactly one of `sessionId` or `projectId`. Optional `from` and `to` are ISO-8601 timestamps
-with offsets (inclusive). These filter request timestamps, not session dates; untimestamped
-requests only participate in unbounded analyses. Unknown scopes return 404; invalid
-filters return 400.
+### POST /api/v1/evolve/analysis
+The JSON body must include exactly one of `sessionId` or `projectId`, `cli` (`claude` or
+`copilot`), and `consent: true`. Optional `from` and `to` are ISO-8601 timestamps with offsets
+(inclusive). These filter request timestamps, not session dates; untimestamped requests only
+participate in unbounded analyses. The service runs the selected locally installed CLI without
+project access or tools, in a temporary working directory. The CLI may send prompts to its
+configured AI service. Session Insights itself does not call an AI web API. Missing consent or
+invalid filters return 400; unknown scopes return 404; a missing CLI returns 422.
 
 ```json
 {
   "sessionsScanned": 2,
+  "requestsAnalyzed": 18,
+  "sampled": false,
   "opportunities": [{
-    "id": "run-tests", "title": "Run and summarize tests", "outline": "string",
+    "id": "release-notes-12345678", "title": "Release notes", "outline": "string",
+    "instructions": "Markdown skill instructions",
     "occurrences": 2, "sessionCount": 2,
     "evidence": [{ "sessionId": "string", "title": "string", "occurrences": 1 }]
   }]
 }
 ```
 
-Only recognized workflows with two or more requests are returned, ranked by distinct
-supporting sessions then request count. Evidence includes up to five supporting sessions
-per workflow; the totals cover all matches. Only workflow IDs and timestamps are retained
-from matching prompts, not prompt text.
+The analysis samples up to 60 requests, preferring the most recent, and returns generated
+skills supported by at least two sampled requests. Evidence includes up to five supporting
+sessions per skill; totals cover all supporting requests. Prompt text is read from existing
+local session logs and held in memory for analysis; it is never returned by the API or stored
+by Session Insights. Only after explicit user consent is it passed to the selected CLI, which
+may persist its own session history and may send prompts to its configured AI service.
 
 ### GET /health
 `200 {"status":"Healthy"}`

@@ -24,12 +24,12 @@ internal sealed class HarnessInventory(
     private IReadOnlyList<HarnessInventoryDto>? snapshot;
     private DateTimeOffset refreshedAt;
 
-    public async Task<IReadOnlyList<HarnessInventoryDto>> GetAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<HarnessInventoryDto>> GetAsync(CancellationToken cancellationToken, bool refresh = false)
     {
         await gate.WaitAsync(cancellationToken);
         try
         {
-            if (snapshot is null || clock.GetUtcNow() - refreshedAt >= TimeSpan.FromMinutes(1))
+            if (refresh || snapshot is null || clock.GetUtcNow() - refreshedAt >= TimeSpan.FromMinutes(1))
             {
                 snapshot = await Task.WhenAll(ReadAsync(SessionSource.Claude, cancellationToken), ReadAsync(SessionSource.Copilot, cancellationToken));
                 refreshedAt = clock.GetUtcNow();

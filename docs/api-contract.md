@@ -176,6 +176,20 @@ Configured `ClaudeConfigDir`/`CopilotHome` are passed to their CLIs; otherwise i
 `CLAUDE_CONFIG_DIR`/`COPILOT_HOME` apply. Session discovery respects those same homes unless
 `ClaudeRoot`/`CopilotRoot` explicitly overrides the transcript directory.
 
+### Harness updates
+- `GET /api/v1/harness/updates` returns one maintenance state per provider.
+- `POST /api/v1/harness/updates/check` queues a marketplace check.
+- `POST /api/v1/harness/updates/{source}` queues an available update and returns its state.
+
+Each state includes `source`, `status`, `latestVersion`, `available`, `checkedAt`, `error`,
+`completedAt`, `completionStatus` (`succeeded|error|null`), and `completionError` (`string|null`).
+`status` and `error` describe current maintenance progress. The three completion fields describe
+the last finished installation and remain unchanged during subsequent checks or while another
+installation is queued/running. They are null until an installation finishes and are kept in
+memory until application restart. Clients use `completedAt` to deduplicate completion notifications
+and refresh inventory, and `completionStatus`/`completionError` for the outcome, not the current
+maintenance status/error.
+
 ### Reports
 ReportRun:
 ```json

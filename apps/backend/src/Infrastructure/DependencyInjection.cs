@@ -26,6 +26,9 @@ public static class DependencyInjection
         services.AddSingleton<IExcludedSessions, ExcludedSessionsStore>();
         services.AddSingleton<ISessionIndex, SessionIndex>();
         services.AddSingleton<IHarnessInventory, HarnessInventory>();
+        services.AddSingleton<HarnessUpdates>();
+        services.AddSingleton<IHarnessUpdates>(sp => sp.GetRequiredService<HarnessUpdates>());
+        services.AddHostedService(sp => sp.GetRequiredService<HarnessUpdates>());
         services.AddHostedService<SessionIndexWarmer>();
 
         services.AddSingleton<ReportActivityTracker>();

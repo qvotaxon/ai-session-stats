@@ -7,6 +7,8 @@ import { overviewApi, type Overview } from "@/features/overview/api";
 
 vi.spyOn(overviewApi, "get");
 vi.spyOn(overviewApi, "installations");
+vi.spyOn(overviewApi, "updates");
+vi.spyOn(overviewApi, "claudeAllowance");
 
 const overview = (): Overview => ({
   generatedAt: "2026-11-12T10:00:00Z",
@@ -52,6 +54,14 @@ describe("Dashboard and harness", () => {
           error: null,
         },
       ]);
+    vi.mocked(overviewApi.updates).mockReset().mockResolvedValue([]);
+    vi.mocked(overviewApi.claudeAllowance).mockReset().mockResolvedValue({
+      status: "unavailable",
+      updatedAt: null,
+      fiveHour: null,
+      sevenDay: null,
+      message: "Connect Claude Code's status line to provide subscription usage limits.",
+    });
   });
 
   it("uses the root for the dashboard, labels aggregate scope, and links to sessions", async () => {
@@ -60,12 +70,27 @@ describe("Dashboard and harness", () => {
     expect(await screen.findByRole("link", { name: "Fix the scheduler" })).toHaveAttribute("href", "/sessions/s-1");
     const sessionsTotal = screen.getByText("Sessions · all indexed history").parentElement!;
     expect(within(sessionsTotal).getByText("110")).toBeInTheDocument();
-    expect(screen.getByText("Allowance unavailable")).toBeInTheDocument();
+    expect(await screen.findByText(/Connect Claude Code's status line/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /all sessions/i })).toHaveAttribute(
       "href",
       expect.stringContaining("/sessions"),
     );
     expect(await screen.findByText("0.26.1 (user)")).toBeInTheDocument();
+  });
+
+  it("shows Claude subscription limits when Claude Code reports them", async () => {
+    vi.mocked(overviewApi.claudeAllowance).mockResolvedValue({
+      status: "available",
+      updatedAt: "2026-11-12T10:00:00Z",
+      fiveHour: { usedPercentage: 25, resetsAt: "2026-11-12T15:00:00Z" },
+      sevenDay: { usedPercentage: 60, resetsAt: "2026-11-19T10:00:00Z" },
+      message: null,
+    });
+
+    renderApp("/");
+
+    expect(await screen.findByText("75% remaining")).toBeInTheDocument();
+    expect(screen.getByText("40% remaining")).toBeInTheDocument();
   });
 
   it("shows unknown attribution and supporting sessions without treating missing metrics as zero failure rates", async () => {

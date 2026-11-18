@@ -13,4 +13,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="SessionInsights.Web.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="claude-statusline.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

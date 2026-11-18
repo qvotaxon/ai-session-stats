@@ -30,12 +30,32 @@ multiple versions. No plugin update or access to plugin source is required.
 Comparisons keep providers and recorded CLI versions separate. They describe session health,
 not proof that the harness caused a failure; project, task, and model differences still matter.
 Attribution coverage and supporting sessions remain visible. Lifetime token totals are never
-assigned to a harness version. Claude subscription allowance/API credit balances are explicitly
-unavailable, rather than estimated from session tokens.
+assigned to a harness version. Claude subscription limits are shown only when provided by
+Claude Code's local status line; they are never estimated from session tokens.
 
 This feature runs locally and does not invoke models or send telemetry. It retains only
 allowlisted version evidence and metrics, not raw hook output or installation paths. See
 `docs/api-contract.md` for attribution rules and supported CLI metadata shapes.
+
+The dashboard's Claude allowance card reads the 5-hour and 7-day subscription limits from
+Claude Code's status-line input. To enable it, add a `statusLine` command to
+`%USERPROFILE%\.claude\settings.json` (merge it with existing settings):
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"C:\\Users\\YOUR_NAME\\AppData\\Local\\SessionInsights\\app\\claude-statusline.ps1\""
+  }
+}
+```
+
+Replace `YOUR_NAME` with the Windows account folder name and restart Claude Code. If
+`CLAUDE_CONFIG_DIR` is set, add the setting to that directory's `settings.json` instead.
+The script saves only the current limit percentages, reset times, and update time under
+`%LOCALAPPDATA%\SessionInsights`; the dashboard refreshes every 15 seconds and marks data
+older than 15 minutes as stale. Limits appear when Claude Code supplies them (typically
+after a response). This does not read Claude credentials or expose API-credit balances.
 
 ## Installing
 

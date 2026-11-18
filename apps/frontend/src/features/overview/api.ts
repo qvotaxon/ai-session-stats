@@ -58,7 +58,21 @@ const inventoriesSchema = z.array(
   }),
 );
 
+const allowanceWindowSchema = z.object({
+  usedPercentage: z.number(),
+  resetsAt: z.string().nullable(),
+});
+
+const claudeAllowanceSchema = z.object({
+  status: z.enum(["available", "stale", "unavailable", "error"]),
+  updatedAt: z.string().nullable(),
+  fiveHour: allowanceWindowSchema.nullable(),
+  sevenDay: allowanceWindowSchema.nullable(),
+  message: z.string().nullable(),
+});
+
 export type Overview = z.infer<typeof overviewSchema>;
+export type ClaudeAllowance = z.infer<typeof claudeAllowanceSchema>;
 
 export const overviewApi = {
   async get(signal?: AbortSignal) {
@@ -68,6 +82,10 @@ export const overviewApi = {
   async installations(signal?: AbortSignal) {
     const { data } = await apiClient.get<unknown>("/harness/installations", { signal });
     return inventoriesSchema.parse(data);
+  },
+  async claudeAllowance(signal?: AbortSignal) {
+    const { data } = await apiClient.get<unknown>("/claude/allowance", { signal });
+    return claudeAllowanceSchema.parse(data);
   },
   async updates(signal?: AbortSignal) {
     const { data } = await apiClient.get<unknown>("/harness/updates", { signal });

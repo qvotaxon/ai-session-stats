@@ -4,6 +4,7 @@ import { QueryErrorAlert } from "@/common/QueryErrorAlert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { HarnessInstallations } from "@/features/overview/HarnessInstallations";
+import { ClaudeAllowanceCard } from "@/features/overview/ClaudeAllowanceCard";
 import { useOverview } from "@/features/overview/api";
 import { SourceBadge } from "@/features/sessions/components/SourceBadge";
 import { DEFAULT_SESSIONS_SEARCH } from "@/features/sessions/searchParams";
@@ -122,19 +123,7 @@ const DashboardPage = () => {
       )}
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <HarnessInstallations />
-        <Card>
-          <CardHeader>
-            <CardTitle>Claude allowance</CardTitle>
-            <CardDescription>Remaining subscription allowance and API credits</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p className="font-medium">Allowance unavailable</p>
-            <p className="text-muted-foreground">
-              Local session logs do not establish your account balance or reset time. No account connection is
-              configured; recorded token usage is shown separately.
-            </p>
-          </CardContent>
-        </Card>
+        <ClaudeAllowanceCard />
       </div>
     </div>
   );

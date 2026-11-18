@@ -98,7 +98,7 @@ internal sealed class HarnessUpdates(
                         lock (gate)
                         {
                             if (states[source].Status == "updating") { continue; }
-                            states[source] = states[source] with { Status = "checking", Available = false };
+                            states[source] = states[source] with { Status = "checking", Available = false, CompletedAt = null, Error = null };
                         }
                         await RunAsync(source, false, token);
                     }
@@ -214,7 +214,8 @@ internal sealed class HarnessUpdates(
         }
         else
         {
-            var home = options.Value.ClaudeConfigDir ?? Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR")
+            var home = new[] { options.Value.ClaudeConfigDir, Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR") }
+                .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
                 ?? fs.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
             using var known = JsonDocument.Parse(await fs.File.ReadAllTextAsync(fs.Path.Combine(home, "plugins", "known_marketplaces.json"), token));
             marketplaceRoot = known.RootElement.Get("msdc-plugins").Str("installLocation")
@@ -260,6 +261,6 @@ internal sealed class HarnessUpdates(
             throw new InvalidOperationException("The installed plugin has an unsupported version.");
         }
         var comparison = version.CompareTo(Version.Parse(latest));
-        return comparison == 0 && installed.Contains('-', StringComparison.Ordinal) ? -1 : comparison;
+        return comparison == 0 && installed.Split('+')[0].Contains('-', StringComparison.Ordinal) ? -1 : comparison;
     }
 }

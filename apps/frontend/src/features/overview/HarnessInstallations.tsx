@@ -8,13 +8,15 @@ import { SourceBadge } from "@/features/sessions/components/SourceBadge";
 import { formatDateTime } from "@/lib/format";
 import { useCheckHarnessUpdates, useHarnessInstallations, useHarnessUpdates, useUpdateHarness } from "./api";
 
+const harnessNotifications = new Set<string>();
+
 export const HarnessInstallations = () => {
   const query = useHarnessInstallations();
   const updates = useHarnessUpdates();
   const update = useUpdateHarness();
   const check = useCheckHarnessUpdates();
   const client = useQueryClient();
-  const seen = useRef(new Set<string>());
+  const seen = useRef(harnessNotifications);
   useEffect(() => {
     for (const state of updates.data ?? []) {
       if (state.completedAt && !seen.current.has(`${state.source}:${state.completedAt}`)) {

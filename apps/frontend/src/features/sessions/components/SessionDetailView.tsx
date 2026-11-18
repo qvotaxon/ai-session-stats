@@ -1,6 +1,7 @@
 import { ArrowLeft, Info, Sparkles } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ReportPanel } from "@/features/reports/components/ReportPanel";
@@ -37,7 +38,14 @@ export const SessionDetailView = ({ session }: { session: SessionDetail }) => (
           </div>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight break-words">{session.title || session.id}</h1>
         </div>
-        <ContinueButton sessionId={session.id} canContinue={session.canContinue} />
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link to="/evolve" search={{ sessionId: session.id }}>
+              Find skill opportunities
+            </Link>
+          </Button>
+          <ContinueButton sessionId={session.id} canContinue={session.canContinue} />
+        </div>
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
         {session.project ?? "No project"} · started {formatDateTime(session.startedAt)}

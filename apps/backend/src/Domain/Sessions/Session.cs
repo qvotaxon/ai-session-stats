@@ -46,6 +46,7 @@ public sealed class Session
     public int SubagentTotal { get; init; }
     public IReadOnlyList<NamedCount> SubagentTypes { get; init; } = [];
     public IReadOnlyList<NamedCount> Skills { get; init; } = [];
+    public IReadOnlyList<SkillSignal> SkillSignals { get; init; } = [];
 
     public int UserTurns { get; init; }
     public int AssistantTurns { get; init; }

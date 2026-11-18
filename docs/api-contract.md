@@ -23,6 +23,33 @@ Copilot runs resume in place (no new session), and the report turn is excluded f
 
 ## Endpoints
 
+### GET /api/v1/evolve/projects
+Returns `[{ "id": "opaque string", "name": "string", "sessionCount": 0 }]` from the same
+listable session index. Project identity is the recorded working directory, not the display
+name; the directory itself is not returned.
+
+### GET /api/v1/evolve/analysis
+Pass exactly one of `sessionId` or `projectId`. Optional `from` and `to` are ISO-8601 timestamps
+with offsets (inclusive). These filter request timestamps, not session dates; untimestamped
+requests only participate in unbounded analyses. Unknown scopes return 404; invalid
+filters return 400.
+
+```json
+{
+  "sessionsScanned": 2,
+  "opportunities": [{
+    "id": "run-tests", "title": "Run and summarize tests", "outline": "string",
+    "occurrences": 2, "sessionCount": 2,
+    "evidence": [{ "sessionId": "string", "title": "string", "occurrences": 1 }]
+  }]
+}
+```
+
+Only recognized workflows with two or more requests are returned, ranked by distinct
+supporting sessions then request count. Evidence includes up to five supporting sessions
+per workflow; the totals cover all matches. Only workflow IDs and timestamps are retained
+from matching prompts, not prompt text.
+
 ### GET /health
 `200 {"status":"Healthy"}`
 

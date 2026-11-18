@@ -32,16 +32,24 @@ export const PaginationBar = ({ page, pageSize, totalCount, totalPages, onPageCh
         {formatInteger(first)}–{formatInteger(last)} of {formatInteger(totalCount)} sessions
       </p>
       <div className="flex flex-wrap items-center gap-1">
-        <Button variant="outline" size="sm" onClick={() => onPageChange(1)} disabled={page <= 1} aria-label="First page">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(1)}
+          disabled={page <= 1}
+          aria-label="First page"
+        >
           <ChevronsLeft className="size-4" aria-hidden />
         </Button>
-        <Button variant="outline" size="sm" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
+        <Button type="button" variant="outline" size="sm" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
           <ChevronLeft className="size-4" aria-hidden /> Previous
         </Button>
         {getPageItems(page, Math.max(totalPages, 1)).map((item) =>
           typeof item === "number" ? (
             <Button
               key={item}
+              type="button"
               variant={item === page ? "default" : "outline"}
               size="sm"
               onClick={() => onPageChange(item)}
@@ -56,10 +64,17 @@ export const PaginationBar = ({ page, pageSize, totalCount, totalPages, onPageCh
             </span>
           ),
         )}
-        <Button variant="outline" size="sm" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+        >
           Next <ChevronRight className="size-4" aria-hidden />
         </Button>
         <Button
+          type="button"
           variant="outline"
           size="sm"
           onClick={() => onPageChange(totalPages)}

@@ -9,7 +9,7 @@ export const QueryErrorAlert = ({ title, error, onRetry }: { title: string; erro
     <AlertDescription>
       <p>{error.message}</p>
       {onRetry && (
-        <Button variant="outline" size="sm" className="mt-2" onClick={onRetry}>
+        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={onRetry}>
           Try again
         </Button>
       )}

@@ -1,6 +1,17 @@
 # ai-session-stats
 A tool for visualizing ai sessions, their tool calls and other relevant performance metrics
 
+## Evolve: find skill opportunities
+
+Open **Evolve** to analyze one session or all Copilot and Claude CLI sessions recorded in the
+same project folder. Optional start and end times filter individual requests, so a resumed
+session can contribute requests even if it started before the range.
+
+Evolve uses local rules to recognize recurring workflows such as running tests or reviewing
+code. Each suggestion includes what to capture in a skill and links to supporting sessions.
+It reads existing CLI logs; it does not launch either CLI, call a model or external service,
+or create or install skills.
+
 ## Dashboard and MSDC harness health
 
 The home page shows three recently active sessions, all-history usage totals, recent activity,

@@ -18,6 +18,94 @@ namespace SessionInsights.Infrastructure.Tests;
 public sealed class HarnessUpdatesTests
 {
     [Theory]
+    [InlineData("remote", ".github/plugin/marketplace.json", "./plugins/harness", "0.29.0", null, null)]
+    [InlineData("pinned", ".claude-plugin/marketplace.json", "plugins/harness", null, "0.28.0", null)]
+    [InlineData("local", "marketplace.json", "./", null, "0.29.0", null)]
+    [InlineData("remote", "marketplace.json", "./plugins/harness", "0.29.0-rc.1", "0.29.0",
+        "The marketplace did not provide a supported stable plugin version.")]
+    [InlineData("remote", "marketplace.json", "../outside", null, "0.29.0",
+        "The plugin manifest must be inside its marketplace.")]
+    public async Task Copilot_reads_refreshed_metadata_when_browse_omits_version(
+        string registration, string catalogPath, string path, string? catalogVersion, string? manifestVersion, string? error)
+    {
+        var token = TestContext.Current.CancellationToken;
+        var fs = new MockFileSystem();
+        var options = Options();
+        var localRoot = fs.Path.Combine(fs.Path.GetTempPath(), "local-marketplace");
+        options.Value.CopilotHome = fs.Path.Combine(fs.Path.GetTempPath(), "custom-copilot");
+        var inventory = Substitute.For<IHarnessInventory>();
+        inventory.GetAsync(Arg.Any<CancellationToken>(), true).Returns(
+            (IReadOnlyList<HarnessInventoryDto>)
+            [
+                new("claude", "notInstalled", Now, [], null),
+                new("copilot", "installed", Now, [new("0.28.0", true, null)], null),
+            ]);
+        var locator = Substitute.For<IExecutableLocator>();
+        locator.Locate("copilot").Returns("/bin/copilot");
+        var processes = Substitute.For<IProcessRunner>();
+        string? cache = null;
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var spec = call.Arg<ProcessSpec>();
+            spec.Environment!["COPILOT_HOME"].ShouldBe(options.Value.CopilotHome);
+            var commandCache = spec.Environment["COPILOT_CACHE_HOME"];
+            if (spec.Arguments.SequenceEqual(new[] { "plugin", "marketplace", "update", "msdc-plugins" }))
+            {
+                cache = commandCache;
+                var root = registration switch
+                {
+                    "local" => localRoot,
+                    "pinned" => fs.Path.Combine(cache, "marketplaces", "_pinned", "owner-repo-pinned"),
+                    _ => fs.Path.Combine(cache, "marketplaces", "owner-repo"),
+                };
+                var catalog = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    name = "msdc-plugins",
+                    // This is the marketplace's own version and must not be used for the plugin.
+                    metadata = new { version = "9.0.0" },
+                    plugins = new[] { new { name = "msdc-harness", version = catalogVersion, source = path } },
+                });
+                fs.AddFile(fs.Path.Combine(root, catalogPath), new MockFileData(catalog));
+                if (manifestVersion is not null)
+                {
+                    fs.AddFile(fs.Path.GetFullPath(fs.Path.Combine(root, path, ".claude-plugin", "plugin.json")),
+                        new MockFileData($$"""{"name":"msdc-harness","version":"{{manifestVersion}}"}"""));
+                }
+                return new ProcessResult(0, "", "");
+            }
+            commandCache.ShouldBe(cache);
+            if (spec.Arguments.SequenceEqual(new[] { "plugin", "marketplace", "browse", "msdc-plugins", "--json" }))
+            {
+                return new ProcessResult(0, """[{"name":"msdc-harness","description":"Harness","marketplace":"msdc-plugins"}]""", "");
+            }
+            spec.Arguments.ShouldBe(new[] { "plugin", "marketplace", "list", "--json" });
+            registration.ShouldBe("local");
+            var list = System.Text.Json.JsonSerializer.Serialize(new[] { new { name = "msdc-plugins", source = "Local: " + localRoot } });
+            return new ProcessResult(0, list, "");
+        });
+        using var updates = new HarnessUpdates(inventory, locator, processes, fs,
+            options, TimeProvider.System, NullLogger<HarnessUpdates>.Instance);
+        HarnessUpdateDto State() => updates.Get().Single(s => s.Source == "copilot");
+
+        await updates.StartAsync(token);
+        try
+        {
+            await WaitForAsync(() => State().Status is "checked" or "error", token);
+            var state = State();
+            var expectedVersion = error is null ? catalogVersion ?? manifestVersion : null;
+            state.Status.ShouldBe(error is null ? "checked" : "error");
+            state.Error.ShouldBe(error);
+            state.LatestVersion.ShouldBe(expectedVersion);
+            state.Available.ShouldBe(expectedVersion == "0.29.0");
+        }
+        finally
+        {
+            await updates.StopAsync(token);
+        }
+        fs.Directory.Exists(cache.ShouldNotBeNull()).ShouldBeFalse();
+    }
+
+    [Theory]
     [InlineData(true, true)]
     [InlineData(true, false)]
     [InlineData(false, true)]

@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.0](https://github.com/qvotaxon/ai-session-stats/compare/v1.2.0...v1.3.0) (2026-11-18)
+
+
+### Features
+
+* add local Evolve skill opportunity analysis ([#28](https://github.com/qvotaxon/ai-session-stats/issues/28)) ([4825c31](https://github.com/qvotaxon/ai-session-stats/commit/4825c31b7d536af8109cf642b860942d8951f2b1))
+* add MSDC harness plugin update workflow ([#30](https://github.com/qvotaxon/ai-session-stats/issues/30)) ([3dd858b](https://github.com/qvotaxon/ai-session-stats/commit/3dd858bb4a74549fdcd042a5204413da69b6b596))
+* **sessions:** add numbered pagination ([aeae05f](https://github.com/qvotaxon/ai-session-stats/commit/aeae05fbb1513986644d95d85ea8e6556c8c4c3a))
+
+
+### Bug Fixes
+
+* resolve Copilot harness version detection ([f24e2b7](https://github.com/qvotaxon/ai-session-stats/commit/f24e2b7b2e609e45ea50d56033785e3213d1b4e0))
+* serve a loading dashboard before initialization finishes ([#32](https://github.com/qvotaxon/ai-session-stats/issues/32)) ([1ba15a9](https://github.com/qvotaxon/ai-session-stats/commit/1ba15a9cc20e9fc6c5e0ac25239bf0e1226c496b))
+* show startup page while server launches ([#31](https://github.com/qvotaxon/ai-session-stats/issues/31)) ([4c3fe7b](https://github.com/qvotaxon/ai-session-stats/commit/4c3fe7b1983f69a73798b8960bfc40d30087f779))
+
 ## [1.2.0](https://github.com/qvotaxon/ai-session-stats/compare/v1.1.0...v1.2.0) (2026-11-13)
 
 

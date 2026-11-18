@@ -27,7 +27,8 @@ export const HarnessInstallations = () => {
           state.completionError ?? "Restart the CLI to use the new version.",
         );
         void client.invalidateQueries({ queryKey: ["harness", "installations"] });
-      } else if (state.available && !seen.current.has(`${state.source}:${state.latestVersion}`)) {
+      }
+      if (state.available && !seen.current.has(`${state.source}:${state.latestVersion}`)) {
         seen.current.add(`${state.source}:${state.latestVersion}`);
         showToast("info", `${state.source} MSDC harness update available`, `Version ${state.latestVersion}`);
       }

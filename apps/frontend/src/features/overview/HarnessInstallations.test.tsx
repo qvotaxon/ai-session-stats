@@ -48,4 +48,34 @@ describe("Harness installation completion notifications", () => {
     await waitFor(() => expect(overviewApi.updates).toHaveBeenCalled());
     expect(showToast).toHaveBeenCalledTimes(1);
   });
+
+  it("reports completion and update availability independently", async () => {
+    vi.mocked(overviewApi.updates).mockResolvedValue([{
+      source: "copilot",
+      status: "succeeded",
+      latestVersion: "2.0.0",
+      available: true,
+      checkedAt: "2026-11-18T10:00:00Z",
+      completedAt: "2026-11-18T09:30:00Z",
+      error: null,
+      completionStatus: "succeeded",
+      completionError: null,
+    }]);
+    const client = createTestQueryClient();
+    const view = render(<QueryClientProvider client={client}><HarnessInstallations /></QueryClientProvider>);
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith(
+        "success",
+        "copilot MSDC harness updated",
+        "Restart the CLI to use the new version.",
+      );
+      expect(showToast).toHaveBeenCalledWith(
+        "info",
+        "copilot MSDC harness update available",
+        "Version 2.0.0",
+      );
+    });
+    view.unmount();
+  });
 });

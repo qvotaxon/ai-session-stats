@@ -16,4 +16,5 @@ foreach ($taskName in 'SessionInsights', 'SessionInsightsTray') {
     }
 }
 
-Start-Process "http://localhost:$Port"
+$startupPage = [System.Uri](Join-Path $PSScriptRoot 'wwwroot\starting.html')
+Start-Process ($startupPage.AbsoluteUri + "#port=$Port")

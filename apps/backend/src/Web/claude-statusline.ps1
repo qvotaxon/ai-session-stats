@@ -12,9 +12,17 @@ function Get-RateLimit($limit) {
 
     $reset = $null
     if ($limit.resets_at) {
-        $parsed = [DateTimeOffset]::MinValue
-        if ([DateTimeOffset]::TryParse([string]$limit.resets_at, [ref]$parsed)) {
-            $reset = $parsed.ToUniversalTime().ToString("O")
+        $epochSeconds = 0L
+        if ([long]::TryParse([string]$limit.resets_at, [ref]$epochSeconds)) {
+            try {
+                $reset = [DateTimeOffset]::FromUnixTimeSeconds($epochSeconds).ToString("O")
+            } catch [ArgumentOutOfRangeException] {
+            }
+        } else {
+            $parsed = [DateTimeOffset]::MinValue
+            if ([DateTimeOffset]::TryParse([string]$limit.resets_at, [ref]$parsed)) {
+                $reset = $parsed.ToUniversalTime().ToString("O")
+            }
         }
     }
 

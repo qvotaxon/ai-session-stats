@@ -16,5 +16,21 @@ public sealed record HarnessInventoryDto(
 
 public interface IHarnessInventory
 {
-    Task<IReadOnlyList<HarnessInventoryDto>> GetAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<HarnessInventoryDto>> GetAsync(CancellationToken cancellationToken, bool refresh = false);
+}
+
+public sealed record HarnessUpdateDto(
+    string Source,
+    string Status,
+    string? LatestVersion,
+    bool Available,
+    DateTimeOffset? CheckedAt,
+    DateTimeOffset? CompletedAt,
+    string? Error);
+
+public interface IHarnessUpdates
+{
+    IReadOnlyList<HarnessUpdateDto> Get();
+    HarnessUpdateDto Start(string source);
+    void Check();
 }

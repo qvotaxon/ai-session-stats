@@ -10,7 +10,8 @@ param(
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
-$url = "http://localhost:$Port"
+$startupPage = [System.Uri](Join-Path $PSScriptRoot 'wwwroot\starting.html')
+$startupUrl = $startupPage.AbsoluteUri + "#port=$Port"
 
 # Draws a small bar-chart icon so the tray entry is recognisable without shipping an .ico file.
 function New-TrayIcon([System.Drawing.Color] $accent) {
@@ -51,10 +52,10 @@ $menu.Items.Add('-') | Out-Null
 $quit = $menu.Items.Add('Quit Session Insights')
 $notify.ContextMenuStrip = $menu
 
-$openAction = { Start-Process $url }
+$openAction = { Start-Process $startupUrl }
 $open.add_Click($openAction)
-$changelog.add_Click({ Start-Process "$url/changelog" })
-$notify.add_Click({ if ($_.Button -eq 'Left') { Start-Process $url } })
+$changelog.add_Click({ Start-Process "$startupUrl&path=changelog" })
+$notify.add_Click({ if ($_.Button -eq 'Left') { Start-Process $startupUrl } })
 $restart.add_Click({
     $notify.Icon = $downIcon
     $notify.Text = 'Session Insights: restarting'

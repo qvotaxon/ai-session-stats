@@ -41,7 +41,7 @@ Source: "{#SourceDir}\scripts\tray.ps1"; Flags: dontcopy
 Name: "{autoprograms}\Session Insights"; Filename: "{sys}\conhost.exe"; Parameters: "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""{app}\start-session-insights.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\SessionInsights.Web.exe"; Comment: "Start Session Insights and open the dashboard"
 
 [Run]
-Filename: "http://localhost:5180"; Description: "Open Session Insights"; Flags: shellexec postinstall skipifsilent
+Filename: "{sys}\conhost.exe"; Parameters: "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""{app}\start-session-insights.ps1"""; Description: "Open Session Insights"; Flags: postinstall skipifsilent nowait
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall-task.ps1"" -InstallPath ""{app}"""; Flags: runhidden waituntilterminated; RunOnceId: "StopSessionInsights"

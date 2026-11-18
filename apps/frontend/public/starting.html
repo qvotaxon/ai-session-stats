@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Starting Session Insights</title>
+        <style>
+            body {
+                margin: 0;
+                min-height: 100vh;
+                display: grid;
+                place-items: center;
+                background: #18181b;
+                color: #fafafa;
+                font:
+                    16px system-ui,
+                    sans-serif;
+                text-align: center;
+            }
+            main {
+                padding: 2rem;
+            }
+            .spinner {
+                width: 2.5rem;
+                height: 2.5rem;
+                margin: 0 auto 1.5rem;
+                border: 4px solid #52525b;
+                border-top-color: #60a5fa;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+            }
+            p {
+                color: #d4d4d8;
+            }
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .spinner {
+                    animation: none;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <main role="status">
+            <div class="spinner" aria-hidden="true"></div>
+            <h1>Starting Session Insights</h1>
+            <p id="message">The dashboard will open automatically when the server is ready.</p>
+            <noscript>JavaScript is required to open the dashboard automatically.</noscript>
+        </main>
+        <script>
+            const params = new URLSearchParams(location.hash.slice(1));
+            const port = params.get("port") || "5180";
+            const path = params.get("path") === "changelog" ? "/changelog" : "/";
+            const message = document.getElementById("message");
+
+            if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+                message.textContent = "The configured server port is invalid.";
+            } else {
+                const base = `http://localhost:${port}`;
+                setTimeout(() => {
+                    message.textContent =
+                        "Still waiting for the server. If this continues, check that Session Insights is running.";
+                }, 30000);
+
+                function probe() {
+                    const image = new Image();
+                    let finished = false;
+                    const timeout = setTimeout(retry, 5000);
+                    function retry() {
+                        if (finished) return;
+                        finished = true;
+                        clearTimeout(timeout);
+                        setTimeout(probe, 1000);
+                    }
+                    image.onload = () => {
+                        if (finished) return;
+                        finished = true;
+                        clearTimeout(timeout);
+                        location.replace(base + path);
+                    };
+                    image.onerror = retry;
+                    image.src = `${base}/startup-probe.svg?${Date.now()}`;
+                }
+                probe();
+            }
+        </script>
+    </body>
+</html>

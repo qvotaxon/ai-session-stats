@@ -11,6 +11,8 @@ const harnessUpdateSchema = z.object({
   available: z.boolean(),
   checkedAt: z.string().nullable(),
   completedAt: z.string().nullable(),
+  completionStatus: z.enum(["succeeded", "error"]).nullable(),
+  completionError: z.string().nullable(),
   error: z.string().nullable(),
 });
 

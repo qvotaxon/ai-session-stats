@@ -26,7 +26,9 @@ public sealed record HarnessUpdateDto(
     bool Available,
     DateTimeOffset? CheckedAt,
     DateTimeOffset? CompletedAt,
-    string? Error);
+    string? Error,
+    string? CompletionStatus = null,
+    string? CompletionError = null);
 
 public interface IHarnessUpdates
 {

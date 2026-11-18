@@ -22,9 +22,9 @@ export const HarnessInstallations = () => {
       if (state.completedAt && !seen.current.has(`${state.source}:${state.completedAt}`)) {
         seen.current.add(`${state.source}:${state.completedAt}`);
         showToast(
-          state.status === "error" ? "error" : "success",
-          `${state.source} MSDC harness ${state.status === "error" ? "update failed" : "updated"}`,
-          state.error ?? "Restart the CLI to use the new version.",
+          state.completionStatus === "error" ? "error" : "success",
+          `${state.source} MSDC harness ${state.completionStatus === "error" ? "update failed" : "updated"}`,
+          state.completionError ?? "Restart the CLI to use the new version.",
         );
         void client.invalidateQueries({ queryKey: ["harness", "installations"] });
       } else if (state.available && !seen.current.has(`${state.source}:${state.latestVersion}`)) {

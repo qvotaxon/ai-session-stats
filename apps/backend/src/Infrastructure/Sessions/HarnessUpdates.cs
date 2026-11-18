@@ -54,7 +54,7 @@ internal sealed class HarnessUpdates(
                 throw new ConflictException("No plugin update is available, or an update is already running.");
             }
 
-            state = state with { Status = "updating", Error = null, CompletedAt = null };
+            state = state with { Status = "updating", Error = null };
             states[source] = state;
             queue.Writer.TryWrite((source, true));
             return state;
@@ -98,7 +98,7 @@ internal sealed class HarnessUpdates(
                         lock (gate)
                         {
                             if (states[source].Status == "updating") { continue; }
-                            states[source] = states[source] with { Status = "checking", Available = false, CompletedAt = null, Error = null };
+                            states[source] = states[source] with { Status = "checking", Available = false, Error = null };
                         }
                         await RunAsync(source, false, token);
                     }
@@ -151,6 +151,8 @@ internal sealed class HarnessUpdates(
                     Available = available,
                     CheckedAt = clock.GetUtcNow(),
                     CompletedAt = install ? clock.GetUtcNow() : states[source].CompletedAt,
+                    CompletionStatus = install ? "succeeded" : states[source].CompletionStatus,
+                    CompletionError = install ? null : states[source].CompletionError,
                     Error = null,
                 };
             }
@@ -178,6 +180,8 @@ internal sealed class HarnessUpdates(
                 Available = install && states[source].Available,
                 CheckedAt = clock.GetUtcNow(),
                 CompletedAt = install ? clock.GetUtcNow() : states[source].CompletedAt,
+                CompletionStatus = install ? "error" : states[source].CompletionStatus,
+                CompletionError = install ? message : states[source].CompletionError,
                 Error = message,
             };
         }

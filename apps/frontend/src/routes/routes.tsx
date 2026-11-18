@@ -9,6 +9,7 @@ import {
 import { AppLayout } from "@/components/layout/AppLayout";
 import { NotFound } from "@/components/layout/NotFound";
 import { sessionsSearchSchema } from "@/features/sessions/searchParams";
+import { z } from "zod";
 
 const rootRoute = createRootRoute({
   component: AppLayout,
@@ -32,6 +33,13 @@ const harnessRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/harness",
   component: lazyRouteComponent(() => import("../pages/HarnessPage")),
+});
+
+const evolveRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/evolve",
+  validateSearch: z.object({ sessionId: z.guid().optional().catch(undefined) }),
+  component: lazyRouteComponent(() => import("../pages/EvolvePage")),
 });
 
 const sessionDetailRoute = createRoute({
@@ -62,6 +70,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   sessionsRoute,
   harnessRoute,
+  evolveRoute,
   sessionDetailRoute,
   settingsRoute,
   applicationLogRoute,

@@ -19,13 +19,19 @@ export const PaginationBar = ({ page, pageSize, totalCount, totalPages, onPageCh
         {formatInteger(first)}–{formatInteger(last)} of {formatInteger(totalCount)} sessions
       </p>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
+        <Button type="button" variant="outline" size="sm" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
           <ChevronLeft className="size-4" aria-hidden /> Previous
         </Button>
         <span className="min-w-24 text-center text-sm">
           Page {page} of {Math.max(totalPages, 1)}
         </span>
-        <Button variant="outline" size="sm" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+        >
           Next <ChevronRight className="size-4" aria-hidden />
         </Button>
       </div>

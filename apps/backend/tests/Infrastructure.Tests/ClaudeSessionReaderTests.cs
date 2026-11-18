@@ -1,3 +1,4 @@
+using System.IO;
 using System.IO.Abstractions.TestingHelpers;
 using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -25,6 +26,25 @@ public sealed class ClaudeSessionReaderTests
     {
         WriteLines(fs, $@"{ClaudeRoot}\proj\{id}.jsonl", lines);
         return Reader().Discover().Single(g => g.SessionId == id);
+    }
+
+    [Fact]
+    public void Parse_ignores_nonhuman_workflow_requests()
+    {
+        var id = NewId();
+        var root = Path.Combine(Path.GetTempPath(), "claude");
+        var main = Path.Combine(root, $"{id}.jsonl");
+        var subagent = Path.Combine(root, id, "subagents", "agent-1.jsonl");
+        WriteLines(fs, main, [
+            User(0, "Review the diff"),
+            User(1, "Review the pull request", kind: "hook"),
+            User(2, "Review the changes", extra: ""","isMeta":true"""),
+            User(3, ReportConstants.Prompt),
+            User(4, "Build a dashboard feature")]);
+        WriteLines(fs, subagent, [User(5, "Review the PR")]);
+        var group = new SessionFileGroup(id, "", [main, subagent]);
+
+        Reader().Parse(group, Now)!.SkillSignals.Single().Workflow.ShouldBe("review-code");
     }
 
     [Fact]

@@ -40,6 +40,11 @@ export const AppLayout = () => (
               Harness
             </Link>
           </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/evolve" search={{}} activeProps={{ className: "bg-accent" }}>
+              Evolve
+            </Link>
+          </Button>
         </nav>
         <div className="flex items-center gap-1">
           <DropdownMenu>

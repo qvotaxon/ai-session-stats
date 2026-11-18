@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.IO.Abstractions.TestingHelpers;
 using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,6 +22,22 @@ public sealed class CopilotSessionReaderTests
         WriteLines(fs, $@"{CopilotRoot}\{id}\events.jsonl", lines);
         fs.AddFile($@"{CopilotRoot}\{id}\workspace.yaml", new MockFileData("id: x\ncwd: C:\\work\\demo\nname: Demo session\ncreated_at: 2026-01-10T10:00:00Z\n"));
         return Reader().Discover().Single(g => g.SessionId == id);
+    }
+
+    [Fact]
+    public void Parse_records_workflow_signals_from_user_messages_only()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "copilot", "events.jsonl");
+        WriteLines(fs, path, [
+            Json("user.message", Ts(0), """{"content":"Please run the unit tests"}"""),
+            Json("assistant.message", Ts(1), """{"content":"Run the unit tests"}"""),
+            Json("user.message", Ts(2), $$"""{"content":"{{ReportConstants.Prompt}}"}"""),
+            Json("user.message", Ts(3), """{"content":"Could you rerun the integration tests?"}""")]);
+
+        var signals = Reader().Parse(new SessionFileGroup(NewId(), "", [path]), Now)!.SkillSignals;
+
+        signals.Select(s => s.Workflow).ShouldBe(["run-tests", "run-tests"]);
+        signals.Select(s => s.At).ShouldBe([(DateTimeOffset?)DateTimeOffset.Parse(Ts(0)), DateTimeOffset.Parse(Ts(3))]);
     }
 
     [Fact]

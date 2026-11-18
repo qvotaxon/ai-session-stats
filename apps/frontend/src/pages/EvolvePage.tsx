@@ -178,7 +178,11 @@ const EvolveForm = ({ initialSession }: { initialSession?: string }) => {
                 <select
                   className={selectClass}
                   value={cli}
-                  onChange={(event) => setCli(event.target.value === "claude" ? "claude" : "copilot")}
+                  onChange={(event) => {
+                    setCli(event.target.value === "claude" ? "claude" : "copilot");
+                    setConsent(false);
+                    analysis.reset();
+                  }}
                 >
                   <option value="copilot">GitHub Copilot CLI</option>
                   <option value="claude">Claude Code CLI</option>

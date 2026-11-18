@@ -24,10 +24,11 @@ public sealed class ForkExclusionTests
 
     private ExcludedSessionsStore Store() => new(fs, Options(), NullLogger<ExcludedSessionsStore>.Instance);
 
-    private SessionIndex Index(IExcludedSessions excluded, IReportActivity activity) => new(
+    private SessionIndex Index(IExcludedSessions excluded, IReportActivity activity, ISkillAnalysisActivity? skillAnalysis = null) => new(
         [new ClaudeSessionReader(fs, Options(), NullLogger<ClaudeSessionReader>.Instance)],
         excluded,
         activity,
+        skillAnalysis ?? Substitute.For<ISkillAnalysisActivity>(),
         Options(),
         TimeProvider.System,
         NullLogger<SessionIndex>.Instance);
@@ -94,6 +95,43 @@ public sealed class ForkExclusionTests
 
         activity.HasActiveRun.Returns(false);
         (await index.GetAllAsync(TestContext.Current.CancellationToken)).Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Skill_analysis_sessions_are_held_back_while_running_and_excluded_afterward()
+    {
+        var options = Options();
+        options.Value.CopilotRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "copilot-evolve-index-test");
+        options.Value.ClaudeRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "claude-evolve-index-test");
+        options.Value.DataRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "si-evolve-index-test");
+        var id = NewId();
+        var events = System.IO.Path.Combine(options.Value.CopilotRoot, id, "events.jsonl");
+        var workspace = System.IO.Path.Combine(options.Value.CopilotRoot, id, "workspace.yaml");
+        WriteLines(fs, events,
+        [
+            Json("session.start", Ts(0), $$"""{"startTime":"{{Ts(0)}}","copilotVersion":"1.0"}"""),
+            Json("user.message", Ts(1), """{"content":"Analyze requests"}"""),
+        ]);
+        fs.AddFile(workspace, new($"cwd: {System.Text.Json.JsonSerializer.Serialize(SkillAnalysisActivity.WorkingDirectory)}"));
+        var analysis = new SkillAnalysisActivity();
+        var index = new SessionIndex(
+            [
+                new ClaudeSessionReader(fs, options, NullLogger<ClaudeSessionReader>.Instance),
+                new CopilotSessionReader(fs, options, NullLogger<CopilotSessionReader>.Instance),
+            ],
+            Substitute.For<IExcludedSessions>(),
+            Substitute.For<IReportActivity>(),
+            analysis,
+            options,
+            TimeProvider.System,
+            NullLogger<SessionIndex>.Instance);
+
+        using (analysis.BeginAnalysis())
+        {
+            (await index.GetAllAsync(TestContext.Current.CancellationToken)).ShouldBeEmpty();
+        }
+
+        (await index.GetAllAsync(TestContext.Current.CancellationToken)).ShouldBeEmpty();
     }
 }
 

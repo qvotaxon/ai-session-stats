@@ -77,3 +77,24 @@ it("uses the linked session and prevents submission of an inverted range", async
   expect(await screen.findByText(/No repeated task patterns were strong enough/)).toBeInTheDocument();
   expect(vi.mocked(evolveApi.analyze).mock.calls[0]?.[0]).toMatchObject({ sessionId });
 });
+
+it("clears consent and previous results when the selected CLI changes", async () => {
+  const user = userEvent.setup();
+  vi.mocked(evolveApi.analyze).mockResolvedValue({
+    sessionsScanned: 2,
+    requestsAnalyzed: 2,
+    sampled: false,
+    opportunities: [],
+  });
+  renderApp(`/evolve?sessionId=${sessionId}`);
+  await screen.findByRole("heading", { name: "Evolve" });
+  await user.click(screen.getByRole("checkbox"));
+  await user.click(screen.getByRole("button", { name: "Analyze" }));
+  await screen.findByText(/Analyzed 2 requests/);
+
+  await user.selectOptions(screen.getByLabelText("Local CLI"), "claude");
+
+  expect(screen.getByRole("checkbox")).not.toBeChecked();
+  expect(screen.queryByText(/Analyzed 2 requests/)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Analyze" })).toBeDisabled();
+});

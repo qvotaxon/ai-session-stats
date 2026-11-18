@@ -32,7 +32,7 @@ export const evolveApi = {
     return projectsSchema.parse(data);
   },
   async analyze(params: AnalysisFilters) {
-    const { data } = await apiClient.post<unknown>("/evolve/analysis", params);
+    const { data } = await apiClient.post<unknown>("/evolve/analysis", params, { timeout: 150_000 });
     return analysisSchema.parse(data);
   },
 };

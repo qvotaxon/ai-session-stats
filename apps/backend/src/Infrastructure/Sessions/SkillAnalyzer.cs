@@ -17,10 +17,12 @@ namespace SessionInsights.Infrastructure.Sessions;
 internal sealed class SkillAnalyzer(
     IExecutableLocator locator,
     IProcessRunner processes,
+    ISkillAnalysisActivity activity,
     IOptions<SessionInsightsOptions> options) : ISkillAnalyzer
 {
     private const int MaxRequests = 60;
     private const int MaxPromptLength = 1000;
+    private static readonly TimeSpan AnalysisTimeout = TimeSpan.FromMinutes(2);
 
     private sealed record PromptExample(string Id, string Text, string SessionId, string SessionTitle);
     private sealed record SuggestedSkill(string? Title, string? Description, string? Instructions, string[]? RequestIds);
@@ -35,7 +37,7 @@ internal sealed class SkillAnalyzer(
         var candidates = sessions
             .SelectMany(session => session.SkillPrompts
                 .Where(prompt => (from is null || prompt.At >= from) && (to is null || prompt.At <= to))
-                .Where(prompt => !string.IsNullOrWhiteSpace(prompt.Text) && prompt.Text.Trim().Length >= 15)
+                .Where(prompt => !string.IsNullOrWhiteSpace(prompt.Text))
                 .Select(prompt => (Session: session, Prompt: prompt)))
             .OrderByDescending(item => item.Prompt.At)
             .ThenBy(item => item.Session.Id, StringComparer.Ordinal)
@@ -64,20 +66,30 @@ internal sealed class SkillAnalyzer(
         var prompt = BuildPrompt();
         var input = JsonSerializer.Serialize(examples.Select(example => new { id = example.Id, prompt = example.Text }));
         var arguments = cli == SessionSource.Claude
-            ? new[] { "-p", prompt, "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence" }
+            ? new[] { "-p", prompt, "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--settings", """{"disableAllHooks":true}""" }
             : new[] { "-p", prompt, "--silent", "--no-custom-instructions", "--disable-builtin-mcps", "--deny-tool", "*", "--deny-url", "*" };
         var environment = CliEnvironment(cli);
 
         ProcessResult result;
         try
         {
-            result = await processes.RunAsync(
-                new ProcessSpec(executable, arguments, Path.GetTempPath(), environment, input),
-                cancellationToken);
+            using (activity.BeginAnalysis())
+            using (var timeout = new CancellationTokenSource(AnalysisTimeout))
+            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token))
+            {
+                Directory.CreateDirectory(SkillAnalysisActivity.WorkingDirectory);
+                result = await processes.RunAsync(
+                    new ProcessSpec(executable, arguments, SkillAnalysisActivity.WorkingDirectory, environment, input),
+                    linked.Token);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new UnprocessableException("Skill analysis timed out after 2 minutes. Try a smaller date range.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
         {

@@ -18,6 +18,7 @@ public sealed class SkillAnalyzerTests
     private static readonly DateTimeOffset Start = new(2026, 1, 10, 10, 0, 0, TimeSpan.Zero);
     private readonly IExecutableLocator locator = Substitute.For<IExecutableLocator>();
     private readonly IProcessRunner processes = Substitute.For<IProcessRunner>();
+    private readonly ISkillAnalysisActivity activity = new SkillAnalysisActivity();
 
     [Fact]
     public async Task Uses_local_cli_and_turns_repeated_requests_into_instructions_with_evidence()
@@ -45,7 +46,7 @@ public sealed class SkillAnalyzerTests
             Title = "Second session",
             SkillPrompts = [new SkillPrompt("Write release notes for the changes merged today", Start.AddDays(2))],
         };
-        var analyzer = new SkillAnalyzer(locator, processes, Options());
+        var analyzer = new SkillAnalyzer(locator, processes, activity, Options());
 
         var result = await analyzer.AnalyzeAsync([first, second], Start.AddDays(1), null, SessionSource.Copilot,
             TestContext.Current.CancellationToken);
@@ -62,7 +63,7 @@ public sealed class SkillAnalyzerTests
         await processes.Received(1).RunAsync(
             Arg.Is<ProcessSpec>(spec =>
                 spec.FileName == "/usr/bin/copilot"
-                && spec.WorkingDirectory == System.IO.Path.GetTempPath()
+                && spec.WorkingDirectory == SkillAnalysisActivity.WorkingDirectory
                 && spec.StandardInput != null
                 && spec.Arguments.Contains("--deny-tool")
                 && spec.Arguments.Contains("--no-custom-instructions")
@@ -81,7 +82,7 @@ public sealed class SkillAnalyzerTests
             Source = SessionSource.Claude,
             SkillPrompts = [new SkillPrompt("A single repeated workflow request", null)],
         };
-        var analyzer = new SkillAnalyzer(locator, processes, Options());
+        var analyzer = new SkillAnalyzer(locator, processes, activity, Options());
 
         var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Claude,
             TestContext.Current.CancellationToken);
@@ -109,7 +110,9 @@ public sealed class SkillAnalyzerTests
                 new SkillPrompt("Build this project and summarize failures", Start.AddMinutes(1)),
             ],
         };
-        var analyzer = new SkillAnalyzer(locator, processes, Options());
+        var options = Options();
+        options.Value.ClaudeConfigDir = "/tmp/claude-config";
+        var analyzer = new SkillAnalyzer(locator, processes, activity, options);
 
         var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Claude,
             TestContext.Current.CancellationToken);
@@ -121,8 +124,39 @@ public sealed class SkillAnalyzerTests
                 && spec.Arguments.Contains("--tools")
                 && spec.Arguments.Contains("--strict-mcp-config")
                 && spec.Arguments.Contains("--no-session-persistence")
+                && spec.Arguments.Contains("--settings")
+                && spec.Arguments.Contains("""{"disableAllHooks":true}""")
+                && spec.Environment != null
+                && spec.Environment["CLAUDE_CONFIG_DIR"] == options.Value.ClaudeConfigDir
                 && spec.StandardInput != null
                 && !spec.Arguments.Any(argument => argument.Contains("compilation errors"))),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Analyzes_short_repeated_requests()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty)));
+        var session = new Session
+        {
+            Id = "session-a",
+            Source = SessionSource.Copilot,
+            SkillPrompts =
+            [
+                new SkillPrompt("Run tests", Start),
+                new SkillPrompt("Rerun tests", Start.AddMinutes(1)),
+            ],
+        };
+        var analyzer = new SkillAnalyzer(locator, processes, activity, Options());
+
+        var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Copilot,
+            TestContext.Current.CancellationToken);
+
+        result.RequestsAnalyzed.ShouldBe(2);
+        await processes.Received(1).RunAsync(
+            Arg.Is<ProcessSpec>(spec => spec.StandardInput!.Contains("Run tests") && spec.StandardInput.Contains("Rerun tests")),
             Arg.Any<CancellationToken>());
     }
 }

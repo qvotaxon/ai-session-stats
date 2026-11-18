@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,6 +21,7 @@ internal sealed class SessionIndex(
     IEnumerable<ISessionSourceReader> readers,
     IExcludedSessions excluded,
     IReportActivity activity,
+    ISkillAnalysisActivity skillAnalysis,
     IOptions<SessionInsightsOptions> options,
     TimeProvider clock,
     ILogger<SessionIndex> logger) : ISessionIndex
@@ -32,7 +34,7 @@ internal sealed class SessionIndex(
     public async ValueTask<IReadOnlyList<Session>> GetAllAsync(CancellationToken cancellationToken)
     {
         await EnsureFreshAsync(cancellationToken);
-        return [.. snapshot!.Where(s => !excluded.Contains(s.Id) && !s.LooksLikeReportFork)];
+        return [.. snapshot!.Where(s => !excluded.Contains(s.Id) && !s.LooksLikeReportFork && !IsSkillAnalysisSession(s))];
     }
 
     public async ValueTask<Session?> FindAsync(string id, CancellationToken cancellationToken) =>
@@ -81,11 +83,10 @@ internal sealed class SessionIndex(
                         work.Add((reader, group));
                     }
                 }
-                else if (runActive)
+                else if (runActive || skillAnalysis.HasActiveAnalysis)
                 {
-                    // Race safety: a session file that appears while a report run is active may be that run's fork.
-                    // It stays invisible until the run ends and its origin is resolved (exclusion set or heuristic).
-                    logger.LogDebug("Holding back new {Source} session {SessionId} while a report run is active", reader.Source, group.SessionId);
+                    // A session file that appears during report or skill analysis is held back until its origin is known.
+                    logger.LogDebug("Holding back new {Source} session {SessionId} while a report run or skill analysis is active", reader.Source, group.SessionId);
                 }
                 else
                 {
@@ -108,7 +109,7 @@ internal sealed class SessionIndex(
 
         foreach (var (key, signature, session) in parsed)
         {
-            cache[key] = (signature, session);
+            cache[key] = (signature, IsSkillAnalysisSession(session) ? null : session);
         }
 
         foreach (var stale in cache.Keys.Where(k => !seen.Contains(k)).ToList())
@@ -119,6 +120,20 @@ internal sealed class SessionIndex(
         snapshot = [.. cache.Values.Select(v => v.Session).OfType<Session>().DistinctBy(s => s.Id, StringComparer.OrdinalIgnoreCase)];
         refreshedAt = now;
         logger.LogInformation("Session index refreshed: {SessionCount} sessions, {ReparsedCount} parsed", snapshot.Count, work.Count);
+    }
+
+    private static bool IsSkillAnalysisSession(Session? session)
+    {
+        if (session?.Cwd is not { } cwd)
+        {
+            return false;
+        }
+
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return string.Equals(
+            cwd.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            SkillAnalysisActivity.WorkingDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            comparison);
     }
 }
 

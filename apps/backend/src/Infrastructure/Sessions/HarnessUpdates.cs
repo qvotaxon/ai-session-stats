@@ -159,7 +159,7 @@ internal sealed class HarnessUpdates(
         {
             Fail(source, install, "Plugin maintenance timed out. Check CLI authentication and retry.");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or Win32Exception or InvalidOperationException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or Win32Exception or InvalidOperationException or ArgumentException)
         {
             // Never expose CLI output, marketplace credentials, or local paths.
             var message = ex is InvalidOperationException ? ex.Message : $"Could not read the marketplace ({ex.GetType().Name}).";

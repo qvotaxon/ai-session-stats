@@ -180,6 +180,18 @@ public sealed class SecurityMiddlewareTests(SecurityFixture factory)
     public async Task Api_with_token_returns_an_empty_page() => (await Status(Get("/api/v1/sessions", withToken: true))).ShouldBe(HttpStatusCode.OK);
 
     [Fact]
+    public async Task Claude_allowance_is_authenticated_and_not_cached()
+    {
+        using var client = factory.CreateClient();
+        using var request = Get("/api/v1/claude/allowance", withToken: true);
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Headers.CacheControl.ShouldNotBeNull().NoStore.ShouldBeTrue();
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldContain("\"status\":\"unavailable\"");
+    }
+
+    [Fact]
     public async Task Foreign_host_is_forbidden() => (await Status(Get("/health", host: "evil.example"))).ShouldBe(HttpStatusCode.Forbidden);
 
     [Fact]

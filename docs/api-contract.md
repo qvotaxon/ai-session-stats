@@ -81,6 +81,25 @@ SessionSummary:
 }
 ```
 
+### GET /api/v1/claude/allowance
+
+Returns the most recent Claude Code status-line limits saved locally by
+`claude-statusline.ps1`. The script saves only `usedPercentage`, `resetsAt`, and `updatedAt`
+to `%LOCALAPPDATA%\SessionInsights\claude-allowance.json`. Values older than 15 minutes
+have status `stale`; missing data is `unavailable`. Only subscription windows that Claude
+Code reports are included; API credit balances are not available through this integration.
+The response is `Cache-Control: no-store`.
+
+```json
+{
+  "status": "available|stale|unavailable|error",
+  "updatedAt": "iso|null",
+  "fiveHour": { "usedPercentage": 25, "resetsAt": "iso|null" },
+  "sevenDay": null,
+  "message": "string|null"
+}
+```
+
 ### GET /api/v1/sessions/{id}
 404 if unknown or excluded. SessionDetail = SessionSummary plus:
 ```json

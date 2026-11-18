@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.AddSingleton<HarnessUpdates>();
         services.AddSingleton<IHarnessUpdates>(sp => sp.GetRequiredService<HarnessUpdates>());
         services.AddHostedService(sp => sp.GetRequiredService<HarnessUpdates>());
+        services.AddSingleton<IClaudeAllowanceReader, ClaudeAllowanceReader>();
         services.AddHostedService<SessionIndexWarmer>();
 
         services.AddSingleton<ReportActivityTracker>();

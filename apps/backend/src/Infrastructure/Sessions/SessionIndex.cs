@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -121,17 +122,37 @@ internal sealed class SessionIndex(
     }
 }
 
-/// <summary>Keeps the index warm so the first request does not pay for the initial parse.</summary>
-internal sealed class SessionIndexWarmer(ISessionIndex index, IOptions<SessionInsightsOptions> options, ILogger<SessionIndexWarmer> logger) : BackgroundService
+/// <summary>Initializes application data after the listener starts, then keeps the index warm.</summary>
+internal sealed class SessionIndexWarmer(
+    IServiceProvider services,
+    IHostApplicationLifetime lifetime,
+    ApplicationReadiness readiness,
+    IOptions<SessionInsightsOptions> options,
+    ILogger<SessionIndexWarmer> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = lifetime.ApplicationStarted.Register(() => started.TrySetResult());
+        try
+        {
+            await started.Task.WaitAsync(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
+
         using var timer = new PeriodicTimer(options.Value.IndexRefreshInterval);
         do
         {
             try
             {
+                // Restore report exclusions before publishing the initial session snapshot.
+                _ = services.GetRequiredService<IReportCoordinator>();
+                var index = services.GetRequiredService<ISessionIndex>();
                 await index.GetAllAsync(stoppingToken);
+                readiness.MarkReady();
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -139,6 +160,11 @@ internal sealed class SessionIndexWarmer(ISessionIndex index, IOptions<SessionIn
             }
             catch (Exception ex)
             {
+                if (readiness.Status != "ready")
+                {
+                    readiness.MarkFailed();
+                }
+
                 logger.LogError(ex, "Index refresh failed");
             }
         }

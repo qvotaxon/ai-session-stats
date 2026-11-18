@@ -28,6 +28,10 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
+      "/startup": {
+        target: process.env.SI_API_URL ?? BACKEND,
+        changeOrigin: true,
+      },
       "/api": {
         target: process.env.SI_API_URL ?? BACKEND,
         changeOrigin: true,

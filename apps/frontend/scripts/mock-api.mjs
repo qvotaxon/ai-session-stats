@@ -155,6 +155,7 @@ createServer((req, res) => {
     const url = new URL(req.url, "http://localhost");
     const parts = url.pathname.split("/").filter(Boolean);
     if (url.pathname === "/health") return send(res, 200, { status: "Healthy" });
+    if (url.pathname === "/startup") return send(res, 200, { status: "ready" });
     if (url.pathname === "/api/v1/overview") {
         return send(res, 200, {
             generatedAt: new Date().toISOString(),

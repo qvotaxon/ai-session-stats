@@ -60,6 +60,18 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<HostOriginMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<ApiTokenMiddleware>();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api")
+        && context.RequestServices.GetRequiredService<ApplicationReadiness>().Status != "ready")
+    {
+        context.Response.Headers.RetryAfter = "1";
+        await ProblemWriter.WriteAsync(context, StatusCodes.Status503ServiceUnavailable, "Service Unavailable", "Session Insights is still initializing. Check /startup for readiness.");
+        return;
+    }
+
+    await next(context);
+});
 app.UseMiddleware<SpaIndexMiddleware>();
 
 if (staticFilesPath is not null && Directory.Exists(staticFilesPath))
@@ -74,6 +86,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapDefaultEndpoints();
+app.MapGet("/startup", (HttpContext context, ApplicationReadiness readiness) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    return new { status = readiness.Status };
+});
 app.MapGet("/version", () => new
 {
     version = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!

@@ -6,7 +6,7 @@ Errors are RFC 9457 ProblemDetails. The service listens on `http://127.0.0.1:518
 ## Security
 
 - Bind to loopback only. Reject (403) any request whose `Host` is not `localhost`/`127.0.0.1`/`[::1]` (with the port), or whose `Origin` (if present) is not one of those hosts.
-- Every `/api/**` request needs header `X-Session-Insights-Token: <token>`; missing or wrong is 401. `/health` and `/version` are the anonymous endpoints and return no session data.
+- Every `/api/**` request needs header `X-Session-Insights-Token: <token>`; missing or wrong is 401. `/health`, `/startup`, and `/version` are anonymous and return no session data.
 - Token: random, generated on first run, stored in `%LOCALAPPDATA%\SessionInsights\token` (user-only ACL). The server injects it into the served `index.html` as `<meta name="si-token" content="...">`. In Vite dev, the proxy reads the same file and adds the header.
 - No raw prompt, response, tool arguments or tool output is ever returned. Only metrics, names and counts. The session `title` is truncated to 120 chars. The one exception is `recap` (detail only): the CLI's own summary of the session (Claude `away_summary`, Copilot compaction `<overview>`), truncated to 2000 chars, `null` when the CLI never wrote one.
 
@@ -52,6 +52,14 @@ from matching prompts, not prompt text.
 
 ### GET /health
 `200 {"status":"Healthy"}`
+
+### GET /startup
+`200 {"status":"starting"}` while restoring report history and indexing sessions, then
+`200 {"status":"ready"}`. Initialization failures return `{"status":"failed"}` and are
+logged; initialization retries on the index refresh interval. Responses are not cached.
+The web server and static frontend are available during initialization. Authenticated
+`/api/**` requests return 503 with `Retry-After: 1` until ready. `/health` remains a
+liveness check, not an initialization check.
 
 ### GET /version
 `200 {"version":"1.2.3"}` (the installed application version, without a `v` prefix or build metadata). Preview installs return the upcoming version with a `-preview` suffix, for example `1.2.3-preview`.

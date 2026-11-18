@@ -103,6 +103,8 @@ const EvolveForm = ({ initialSession }: { initialSession?: string }) => {
   const [projectId, setProjectId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [cli, setCli] = useState<"claude" | "copilot">("copilot");
+  const [consent, setConsent] = useState(false);
   const analysis = useMutation({ mutationFn: evolveApi.analyze });
   const start = from ? new Date(from) : undefined;
   const end = to ? new Date(to) : undefined;
@@ -116,6 +118,8 @@ const EvolveForm = ({ initialSession }: { initialSession?: string }) => {
       ...(scope === "session" ? { sessionId } : { projectId }),
       from: start?.toISOString(),
       to: end?.toISOString(),
+      cli,
+      consent,
     });
   }
 
@@ -132,7 +136,7 @@ const EvolveForm = ({ initialSession }: { initialSession?: string }) => {
         <CardHeader>
           <CardTitle>Find skill opportunities</CardTitle>
           <CardDescription>
-            Choose one session or all Copilot and Claude sessions recorded in a project folder.
+            Find recurring tasks in your requests and turn them into reusable skill instructions.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -169,6 +173,21 @@ const EvolveForm = ({ initialSession }: { initialSession?: string }) => {
                   }}
                 />
               )}
+              <label className="block space-y-1 text-sm font-medium">
+                Local CLI
+                <select
+                  className={selectClass}
+                  value={cli}
+                  onChange={(event) => {
+                    setCli(event.target.value === "claude" ? "claude" : "copilot");
+                    setConsent(false);
+                    analysis.reset();
+                  }}
+                >
+                  <option value="copilot">GitHub Copilot CLI</option>
+                  <option value="claude">Claude Code CLI</option>
+                </select>
+              </label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-1 text-sm font-medium">
                   From (optional)
@@ -196,12 +215,29 @@ const EvolveForm = ({ initialSession }: { initialSession?: string }) => {
               <p className="text-sm text-muted-foreground">
                 Times are local and filter individual requests, not session start dates.
               </p>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(event) => {
+                    setConsent(event.target.checked);
+                    analysis.reset();
+                  }}
+                  className="mt-1"
+                />
+                <span>
+                  I consent to sending the selected user requests to the installed{" "}
+                  {cli === "claude" ? "Claude Code" : "GitHub Copilot"} CLI for analysis. The CLI may send them to its
+                  configured AI service and retain its own session history. Session Insights does not call an AI web API
+                  directly.
+                </span>
+              </label>
               {invalidRange && (
                 <p role="alert" className="text-sm text-destructive">
                   The start time must be on or before the end time.
                 </p>
               )}
-              <Button type="submit" disabled={!scopeId || invalidRange || analysis.isPending}>
+              <Button type="submit" disabled={!scopeId || !consent || invalidRange || analysis.isPending}>
                 <Lightbulb className="size-4" aria-hidden /> {analysis.isPending ? "Analyzing…" : "Analyze"}
               </Button>
             </fieldset>
@@ -215,12 +251,14 @@ const EvolveForm = ({ initialSession }: { initialSession?: string }) => {
             Skill opportunities
           </h2>
           <p role="status" className="text-sm text-muted-foreground">
-            {analysis.data.sessionsScanned} {analysis.data.sessionsScanned === 1 ? "session" : "sessions"} checked.{" "}
-            Suggestions are based on recognized workflows requested at least twice.
+            Analyzed {analysis.data.requestsAnalyzed} requests from {analysis.data.sessionsScanned}{" "}
+            {analysis.data.sessionsScanned === 1 ? "session" : "sessions"} using the local CLI.
+            {analysis.data.sampled ? " The most recent requests were sampled." : ""}
           </p>
           {analysis.data.opportunities.length === 0 && (
             <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-              No recurring workflows were found. Try a wider time range or analyze a whole project.
+              No repeated task patterns were strong enough to turn into a skill. Try a wider range or analyze a whole
+              project.
             </p>
           )}
           {analysis.data.opportunities.map((opportunity) => (
@@ -234,6 +272,12 @@ const EvolveForm = ({ initialSession }: { initialSession?: string }) => {
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <p>{opportunity.outline}</p>
+                <div>
+                  <h3 className="font-medium">Suggested skill</h3>
+                  <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-md border bg-muted p-3 font-mono text-xs">
+                    {opportunity.instructions}
+                  </pre>
+                </div>
                 <div>
                   <h3 className="font-medium">Supporting sessions</h3>
                   <ul className="list-disc space-y-1 pl-5">

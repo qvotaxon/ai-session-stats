@@ -8,7 +8,8 @@ public sealed record ProcessSpec(
     string FileName,
     IReadOnlyList<string> Arguments,
     string WorkingDirectory,
-    IReadOnlyDictionary<string, string>? Environment = null);
+    IReadOnlyDictionary<string, string>? Environment = null,
+    string? StandardInput = null);
 
 public sealed record ProcessResult(int ExitCode, string StdOut, string StdErr);
 

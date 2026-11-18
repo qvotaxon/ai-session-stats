@@ -44,7 +44,8 @@ public sealed class ClaudeSessionReaderTests
         WriteLines(fs, subagent, [User(5, "Review the PR")]);
         var group = new SessionFileGroup(id, "", [main, subagent]);
 
-        Reader().Parse(group, Now)!.SkillSignals.Single().Workflow.ShouldBe("review-code");
+        var session = Reader().Parse(group, Now)!;
+        session.SkillPrompts.Select(prompt => prompt.Text).ShouldBe(["Review the diff", "Build a dashboard feature"]);
     }
 
     [Fact]

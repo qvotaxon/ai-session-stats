@@ -34,10 +34,10 @@ public sealed class CopilotSessionReaderTests
             Json("user.message", Ts(2), $$"""{"content":"{{ReportConstants.Prompt}}"}"""),
             Json("user.message", Ts(3), """{"content":"Could you rerun the integration tests?"}""")]);
 
-        var signals = Reader().Parse(new SessionFileGroup(NewId(), "", [path]), Now)!.SkillSignals;
-
-        signals.Select(s => s.Workflow).ShouldBe(["run-tests", "run-tests"]);
-        signals.Select(s => s.At).ShouldBe([(DateTimeOffset?)DateTimeOffset.Parse(Ts(0)), DateTimeOffset.Parse(Ts(3))]);
+        var session = Reader().Parse(new SessionFileGroup(NewId(), "", [path]), Now)!;
+        var prompts = session.SkillPrompts;
+        prompts.Select(p => p.Text).ShouldBe(["Please run the unit tests", "Could you rerun the integration tests?"]);
+        prompts.Select(p => p.At).ShouldBe([(DateTimeOffset?)DateTimeOffset.Parse(Ts(0)), DateTimeOffset.Parse(Ts(3))]);
     }
 
     [Fact]

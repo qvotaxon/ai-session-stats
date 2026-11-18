@@ -21,11 +21,14 @@ it("analyzes a project with an open-ended local time range and links to supporti
   const user = userEvent.setup();
   vi.mocked(evolveApi.analyze).mockResolvedValue({
     sessionsScanned: 2,
+    requestsAnalyzed: 2,
+    sampled: false,
     opportunities: [
       {
         id: "run-tests",
         title: "Run and summarize tests",
         outline: "Capture how to run tests.",
+        instructions: "# Run tests",
         occurrences: 2,
         sessionCount: 1,
         evidence: [{ sessionId, title: "Test session", occurrences: 2 }],
@@ -37,6 +40,7 @@ it("analyzes a project with an open-ended local time range and links to supporti
   await user.selectOptions(screen.getByLabelText("Project"), projectId);
   const localStart = "2026-03-01T10:30";
   fireEvent.change(screen.getByLabelText("From (optional)"), { target: { value: localStart } });
+  await user.click(screen.getByRole("checkbox"));
   await user.click(screen.getByRole("button", { name: "Analyze" }));
 
   expect(await screen.findByRole("link", { name: "Test session" })).toHaveAttribute("href", `/sessions/${sessionId}`);
@@ -44,12 +48,19 @@ it("analyzes a project with an open-ended local time range and links to supporti
     projectId,
     from: new Date(localStart).toISOString(),
     to: undefined,
+    cli: "copilot",
+    consent: true,
   });
 });
 
 it("uses the linked session and prevents submission of an inverted range", async () => {
   const user = userEvent.setup();
-  vi.mocked(evolveApi.analyze).mockResolvedValue({ sessionsScanned: 1, opportunities: [] });
+  vi.mocked(evolveApi.analyze).mockResolvedValue({
+    sessionsScanned: 1,
+    requestsAnalyzed: 0,
+    sampled: false,
+    opportunities: [],
+  });
   renderApp(`/evolve?sessionId=${sessionId}`);
   await screen.findByRole("heading", { name: "Evolve" });
   expect(screen.getByLabelText("Scope")).toHaveValue("session");
@@ -61,7 +72,29 @@ it("uses the linked session and prevents submission of an inverted range", async
   expect(evolveApi.analyze).not.toHaveBeenCalled();
 
   fireEvent.change(from, { target: { value: "" } });
+  await user.click(screen.getByRole("checkbox"));
   await user.click(screen.getByRole("button", { name: "Analyze" }));
-  expect(await screen.findByText(/No recurring workflows were found/)).toBeInTheDocument();
+  expect(await screen.findByText(/No repeated task patterns were strong enough/)).toBeInTheDocument();
   expect(vi.mocked(evolveApi.analyze).mock.calls[0]?.[0]).toMatchObject({ sessionId });
+});
+
+it("clears consent and previous results when the selected CLI changes", async () => {
+  const user = userEvent.setup();
+  vi.mocked(evolveApi.analyze).mockResolvedValue({
+    sessionsScanned: 2,
+    requestsAnalyzed: 2,
+    sampled: false,
+    opportunities: [],
+  });
+  renderApp(`/evolve?sessionId=${sessionId}`);
+  await screen.findByRole("heading", { name: "Evolve" });
+  await user.click(screen.getByRole("checkbox"));
+  await user.click(screen.getByRole("button", { name: "Analyze" }));
+  await screen.findByText(/Analyzed 2 requests/);
+
+  await user.selectOptions(screen.getByLabelText("Local CLI"), "claude");
+
+  expect(screen.getByRole("checkbox")).not.toBeChecked();
+  expect(screen.queryByText(/Analyzed 2 requests/)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Analyze" })).toBeDisabled();
 });

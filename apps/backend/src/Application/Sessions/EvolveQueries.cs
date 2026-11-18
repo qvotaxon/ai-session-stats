@@ -14,16 +14,31 @@ namespace SessionInsights.Application.Sessions;
 
 public sealed record EvolveProject(string Id, string Name, int SessionCount);
 public sealed record SkillEvidence(string SessionId, string Title, int Occurrences);
-public sealed record SkillOpportunity(string Id, string Title, string Outline, int Occurrences, int SessionCount, IReadOnlyList<SkillEvidence> Evidence);
-public sealed record SkillAnalysis(int SessionsScanned, IReadOnlyList<SkillOpportunity> Opportunities);
+public sealed record SkillOpportunity(string Id, string Title, string Outline, string Instructions, int Occurrences, int SessionCount, IReadOnlyList<SkillEvidence> Evidence);
+public sealed record SkillAnalysis(int SessionsScanned, int RequestsAnalyzed, bool Sampled, IReadOnlyList<SkillOpportunity> Opportunities);
+
+public interface ISkillAnalyzer
+{
+    Task<SkillAnalysis> AnalyzeAsync(IReadOnlyList<Session> sessions, DateTimeOffset? from, DateTimeOffset? to, SessionSource cli, CancellationToken cancellationToken);
+}
 
 public sealed record ListEvolveProjectsQuery : IQuery<IReadOnlyList<EvolveProject>>;
 
-public sealed record AnalyzeSkillsQuery(string? SessionId, string? ProjectId, DateTimeOffset? From, DateTimeOffset? To)
+public sealed record AnalyzeSkillsQuery(string? SessionId, string? ProjectId, DateTimeOffset? From, DateTimeOffset? To, string? Cli, bool Consent)
     : IQuery<SkillAnalysis>, IValidatable
 {
     public string? Validate()
     {
+        if (!Consent)
+        {
+            return "Consent is required before selected prompts can be sent to the local CLI.";
+        }
+
+        if (Cli is not ("claude" or "copilot"))
+        {
+            return "Select the claude or copilot CLI.";
+        }
+
         if ((SessionId is null) == (ProjectId is null))
         {
             return "Select exactly one session or project.";
@@ -43,7 +58,7 @@ public sealed record AnalyzeSkillsQuery(string? SessionId, string? ProjectId, Da
     }
 }
 
-public sealed class EvolveQueryHandler(ISessionIndex index)
+public sealed class EvolveQueryHandler(ISessionIndex index, ISkillAnalyzer analyzer)
     : IQueryHandler<ListEvolveProjectsQuery, IReadOnlyList<EvolveProject>>,
       IQueryHandler<AnalyzeSkillsQuery, SkillAnalysis>
 {
@@ -76,36 +91,8 @@ public sealed class EvolveQueryHandler(ISessionIndex index)
             }
         }
 
-        var matches = new Dictionary<string, List<SkillEvidence>>(StringComparer.Ordinal);
-        foreach (var session in sessions)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            foreach (var group in session.SkillSignals
-                .Where(s => (query.From is null || s.At >= query.From) && (query.To is null || s.At <= query.To))
-                .GroupBy(s => s.Workflow, StringComparer.Ordinal))
-            {
-                if (!matches.TryGetValue(group.Key, out var evidence))
-                {
-                    matches[group.Key] = evidence = [];
-                }
-
-                evidence.Add(new SkillEvidence(session.Id, session.Title, group.Count()));
-            }
-        }
-
-        return new SkillAnalysis(sessions.Count,
-            [.. SkillWorkflow.Known
-                .Where(w => matches.ContainsKey(w.Id))
-                .Select(w =>
-                {
-                    var evidence = matches[w.Id];
-                    return new SkillOpportunity(w.Id, w.Title, w.Outline, evidence.Sum(e => e.Occurrences), evidence.Count,
-                        [.. evidence.OrderByDescending(e => e.Occurrences).ThenBy(e => e.SessionId, StringComparer.Ordinal).Take(5)]);
-                })
-                .Where(o => o.Occurrences >= 2)
-                .OrderByDescending(o => o.SessionCount)
-                .ThenByDescending(o => o.Occurrences)
-                .ThenBy(o => o.Id, StringComparer.Ordinal)]);
+        return await analyzer.AnalyzeAsync(sessions, query.From, query.To,
+            query.Cli == "claude" ? SessionSource.Claude : SessionSource.Copilot, cancellationToken);
     }
 
     private static string? ProjectId(Session session)

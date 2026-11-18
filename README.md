@@ -7,10 +7,12 @@ Open **Evolve** to analyze one session or all Copilot and Claude CLI sessions re
 same project folder. Optional start and end times filter individual requests, so a resumed
 session can contribute requests even if it started before the range.
 
-Evolve uses local rules to recognize recurring workflows such as running tests or reviewing
-code. Each suggestion includes what to capture in a skill and links to supporting sessions.
-It reads existing CLI logs; it does not launch either CLI, call a model or external service,
-or create or install skills.
+Evolve finds recurring patterns in actual requests and asks the selected, locally installed
+Claude Code or GitHub Copilot CLI to draft reusable skill instructions. Analysis does not run
+until you explicitly consent. The selected CLI may send those requests to its configured AI
+service; Session Insights itself does not call an AI web API. Requests are held in memory for
+local analysis and are never returned by the Session Insights API. The CLI may retain its own
+session history. Evolve does not create or install skill files.
 
 ## Dashboard and MSDC harness health
 

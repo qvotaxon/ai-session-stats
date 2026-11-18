@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,6 +26,13 @@ public interface IExcludedSessions
 public interface IReportActivity
 {
     bool HasActiveRun { get; }
+}
+
+public interface ISkillAnalysisActivity
+{
+    bool HasActiveAnalysis { get; }
+
+    IDisposable BeginAnalysis();
 }
 
 public interface IReportCoordinator

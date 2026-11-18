@@ -19,6 +19,7 @@ public static class DependencyInjection
     {
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IFileSystem, FileSystem>();
+        services.AddSingleton<ApplicationReadiness>();
         services.AddSingleton<IApplicationLog, ApplicationLogReader>();
 
         services.AddSingleton<ISessionSourceReader, CopilotSessionReader>();

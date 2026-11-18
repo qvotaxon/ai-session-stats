@@ -10,13 +10,14 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SessionInsights.Application.Logs;
+using SessionInsights.Application.Common;
 using Shouldly;
 using SessionInsights.Infrastructure.Security;
 using Xunit;
 
 namespace SessionInsights.Web.Tests;
 
-public sealed class SecurityFixture : WebApplicationFactory<Program>
+public sealed class SecurityFixture : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "si-web-tests-" + Guid.NewGuid().ToString("N"));
 
@@ -35,6 +36,12 @@ public sealed class SecurityFixture : WebApplicationFactory<Program>
     }
 
     public string Token => Services.GetRequiredService<IApiTokenProvider>().Token;
+
+    public async ValueTask InitializeAsync()
+    {
+        using var client = CreateClient();
+        await Services.GetRequiredService<ApplicationReadiness>().WaitAsync(TestContext.Current.CancellationToken);
+    }
 
     protected override void Dispose(bool disposing)
     {

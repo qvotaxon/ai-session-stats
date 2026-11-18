@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -388,12 +389,14 @@ internal sealed class ReportCoordinator : IReportCoordinator
     private sealed class ReportFailure(string message) : Exception(message);
 }
 
-internal sealed class ReportWorker(ReportCoordinator coordinator, ILogger<ReportWorker> logger) : BackgroundService
+internal sealed class ReportWorker(IServiceProvider services, ApplicationReadiness readiness, ILogger<ReportWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
+            await readiness.WaitAsync(stoppingToken);
+            var coordinator = services.GetRequiredService<ReportCoordinator>();
             await foreach (var runId in coordinator.Queue.ReadAllAsync(stoppingToken))
             {
                 await coordinator.ExecuteAsync(runId, stoppingToken);

@@ -56,7 +56,7 @@ $temporaryPath = "$path.$PID.tmp"
 $json = ConvertTo-Json -InputObject $snapshot -Depth 4 -Compress
 [System.IO.File]::WriteAllText($temporaryPath, $json, [System.Text.UTF8Encoding]::new($false))
 if ([System.IO.File]::Exists($path)) {
-    [System.IO.File]::Replace($temporaryPath, $path, $null)
+    [System.IO.File]::Replace($temporaryPath, $path, [NullString]::Value)
 } else {
     [System.IO.File]::Move($temporaryPath, $path)
 }

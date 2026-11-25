@@ -127,10 +127,7 @@ const EvolveForm = ({ initialSession }: { initialSession?: string }) => {
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Evolve</h1>
-        <p className="text-sm text-muted-foreground">
-          Find recurring requests that could become reusable skills. Analysis stays on this device and uses no AI
-          models.
-        </p>
+        <p className="text-sm text-muted-foreground">Find recurring requests that could become reusable skills.</p>
       </header>
       <Card>
         <CardHeader>

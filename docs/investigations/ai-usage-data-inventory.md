@@ -33,7 +33,7 @@ and should be re-verified when the CLI updates.
 | Claude transcripts (JSONL) | `%USERPROFILE%\.claude\projects\{project}\{sessionId}.jsonl` (+ `.../{sessionId}/subagents/agent-*.jsonl`) | `apps/backend/src/Infrastructure/Sessions/ClaudeSessionReader.cs` |
 | Copilot session state | `%USERPROFILE%\.copilot\session-state\{sessionId}\events.jsonl` (+ optional `workspace.yaml`) | `apps/backend/src/Infrastructure/Sessions/CopilotSessionReader.cs` |
 | Claude status-line allowance file | `%LOCALAPPDATA%\SessionInsights\claude-allowance.json` | `apps/backend/src/Infrastructure/Sessions/ClaudeAllowanceReader.cs`, written by `apps/backend/src/Web/claude-statusline.ps1` |
-| msdc-harness heartbeat / plugin evidence | `~/.msdc-harness`, plugin lists | `apps/backend/src/Infrastructure/.../HarnessEvidence.cs` (see qvotaxon/ai-session-stats#71) |
+| msdc-harness plugin evidence (derived) | Not a separate file: derived from the `msdc-harness/{version}/` hook path and plugin names in Claude/Copilot session data. `~/.msdc-harness` is **not** read today. | `apps/backend/src/Infrastructure/Sessions/HarnessEvidence.cs` (see qvotaxon/ai-session-stats#71) |
 
 Path resolution lives in `SessionInsightsOptions` (`ResolveClaudeRoot`,
 `ResolveCopilotRoot`, `ResolveDataRoot`), honouring `CLAUDE_CONFIG_DIR`,
@@ -57,8 +57,8 @@ accumulates (e.g. maxed across resumes); *window* = rolling time window.
 | Cache read tokens | `message.usage.cache_read_input_tokens` | session | yes | yes | low | |
 | Cache write tokens | `message.usage.cache_creation_input_tokens` (plus `cache_creation.ephemeral_1h_input_tokens` / `ephemeral_5m_input_tokens`) | session | yes | yes | low | ephemeral sub-fields seen in v2.0.77 |
 | Reasoning / thinking tokens | `message.usage.output_tokens_details.thinking_tokens` | session | yes | yes | low | read by `ClaudeSessionReader` |
-| Model | `message.model` | session | yes | yes | low | `<synthetic>` appears for synthetic/error turns |
-| Requests | derived (count of assistant messages per model) | session | yes | yes | low | no explicit request field |
+| Model | `message.model` | session | yes | yes | low | `<synthetic>` appears for synthetic/error turns and is excluded from usage |
+| Requests | derived: distinct `message.id` values (`ApiRequestCount`) | session | yes | yes | low | no explicit request field. The reader keeps one entry per `message.id` (the one with the largest token total, because streamed lines repeat the id) and skips `<synthetic>` models and `isApiErrorMessage` lines |
 | Cost ($) | **none** | — | — | — | — | no cost field in the transcript; see status line |
 | Premium requests / nano-AIU | **none** | — | — | — | — | not exposed by Claude Code; `ClaudeSessionReader` states this explicitly |
 | Lines added/removed | **none** | — | — | — | — | not exposed by Claude Code |
@@ -66,7 +66,7 @@ accumulates (e.g. maxed across resumes); *window* = rolling time window.
 | `cwd` | `cwd` (top level) | session | yes | yes | medium | absolute path; confirmed present |
 | Session id / version | `sessionId`, `version` | session | yes | yes | low | confirmed present |
 | Tool use | content block `type:"tool_use"` with `id`, `name`, `input` | session | yes | yes | medium–high | `input` can contain file contents/commands |
-| Tool result | content block `type:"tool_result"` (+ hook attachment events) | session | yes | yes | medium–high | output text can be sensitive |
+| Tool result | content block `type:"tool_result"` with `tool_use_id` (matches `tool_use.id`) and `is_error` (failure = `is_error == true`) | session | yes | yes | medium–high | output text can be sensitive. Hook outcomes are not on the tool result: they are separate `attachment` rows (next rows) |
 | Permission denial | user line with a non-accept `permissionDecision` or a `toolDenialKind` | session | yes | yes | low | no dedicated boolean; inferred |
 | Hook outcome | `attachment` lines (`hook_success`, `hook_blocking_error`, `hook_stopped_continuation`, …) with `hookEvent`, `hookName`, `durationMs`, `exitCode` | session | yes | yes | low | |
 
@@ -114,7 +114,7 @@ reads **only** `rate_limits.five_hour` and `rate_limits.seven_day`
 | 5-hour allowance used % | `rate_limits.five_hour.used_percentage` | yes | window | yes (file) | yes | low |
 | 7-day allowance used % | `rate_limits.seven_day.used_percentage` | yes | window | yes (file) | yes | low |
 | Window reset time | `rate_limits.*.resets_at` | yes | window | yes (file) | yes | low |
-| Total session cost ($) | `cost.total_cost_usd` | **no** | session (resets on `/clear`) | no (not persisted) | yes | low |
+| Estimated session cost ($) | `cost.total_cost_usd` | **no** | session (resets on `/clear`) | no (not persisted) | yes | low |
 | Total duration (ms) | `cost.total_duration_ms` | **no** | session | no | yes | low |
 | API duration (ms) | `cost.total_api_duration_ms` | **no** | session | no | yes | low |
 | Lines added/removed | `cost.total_lines_added` / `cost.total_lines_removed` | **no** | session | no | yes | low |
@@ -127,8 +127,10 @@ mechanically. The script already does an atomic write (temp file + `File.Replace
 low-risk pattern would apply to a `cost.*` snapshot keyed by `session_id`. The
 important caveat is that **`cost.total_cost_usd` resets to 0 after `/clear`**, so
 a persist step must snapshot per `session_id` and treat a decrease as a reset
-rather than overwriting a running total. This is a design note for #76, not a
-change here.
+rather than overwriting a running total. The official status-line docs describe
+`cost.total_cost_usd` as an "Estimated session cost in USD, computed client-side
+at list price" that "may differ from your actual bill", so #76 should label it
+`estimated`, not `reported`. This is a design note for #76, not a change here.
 
 **Official docs:** status-line input fields —
 <https://docs.claude.com/en/docs/claude-code/statusline>.
@@ -147,13 +149,15 @@ Claude Code can emit OTel metrics and events when
 | Lines of code | `claude_code.lines_of_code.count` | metric | added/removed |
 | Active time | `claude_code.active_time.total` | metric | |
 | Tool decision | `claude_code.tool_decision` | event | accept/reject per tool |
-| API request | `claude_code.api_request` | event | may include prompt attributes |
+| User prompt | `claude_code.user_prompt` | event | `prompt` / `prompt_text`, redacted unless `OTEL_LOG_USER_PROMPTS=1` |
+| Assistant response | `claude_code.assistant_response` | event | `response`, redacted by default (`OTEL_LOG_ASSISTANT_RESPONSES`, falls back to `OTEL_LOG_USER_PROMPTS`) |
+| API request | `claude_code.api_request` | event | model, cost, duration, token counts; no prompt text (join on `prompt.id`) |
 
 | Question | Answer |
 | --- | --- |
 | Could Session Insights be a loopback OTLP receiver? | Technically yes — run an OTLP/HTTP endpoint on `127.0.0.1` and point `OTEL_EXPORTER_OTLP_ENDPOINT` at it. This aligns with the loopback-only posture in ADR-0001. |
 | Configuration burden | High and intrusive: the user must set several environment variables (`CLAUDE_CODE_ENABLE_TELEMETRY`, OTLP endpoint/protocol/headers) for *every* shell that runs Claude. Easy to get wrong and easy to leave off. |
-| Privacy of event attributes | Higher than the files: the `api_request` event can carry the user prompt. Prompt inclusion is controlled by `OTEL_LOG_USER_PROMPTS` and is **off by default**; it can be disabled explicitly. Event attributes may also include account/org/session identifiers. |
+| Privacy of event attributes | Higher than the files: the `user_prompt` event carries the prompt and `assistant_response` the response text. Both are redacted by default and are included only when `OTEL_LOG_USER_PROMPTS=1` (or `OTEL_LOG_ASSISTANT_RESPONSES=1` for responses). `api_request` carries no prompt text. Event attributes may also include account/org/session identifiers. |
 | Verdict | Not worth it now. |
 
 **Official docs:** monitoring/telemetry —
@@ -169,13 +173,13 @@ Claude Code can emit OTel metrics and events when
 | --- | --- | --- | --- | --- | --- |
 | Input/output/cache/reasoning tokens | `session.usage_record.usage.*` (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `reasoningTokens`) | session | yes | yes | low |
 | Model | `session.usage_record.usage.model`; per-model under `session.shutdown.modelMetrics` | session | yes | yes | low |
-| Cost | `session.usage_record.cost` | session | yes | yes | low |
-| Premium requests | `session.shutdown.totalPremiumRequests` | cumulative (maxed on resume) | yes | yes | low |
+| Premium requests (per record) | `session.usage_record.usage.cost` (counted as premium requests, `CostInfo.PremiumRequests`; not a monetary amount) | session | yes | yes | low |
+| Premium requests (total) | `session.shutdown.totalPremiumRequests` | cumulative (maxed on resume) | yes | yes | low |
 | Nano-AIU | `session.shutdown.totalNanoAiu`, `session.usage_checkpoint.totalNanoAiu` | cumulative | yes | yes | low |
 | API duration | `session.shutdown.totalApiDurationMs` | cumulative | yes | yes | low |
 | Lines added/removed, files modified | `session.shutdown.codeChanges.{linesAdded,linesRemoved,filesModified}` | cumulative | yes (only at shutdown) | yes | low |
-| Tool execution | `tool.execution_start` / `tool.execution_complete` (`toolCallId`, `toolName`, error code `denied`) | session | yes | yes | medium |
-| Permission denial | `tool.execution_complete` with error code `denied` | session | yes | yes | low |
+| Tool execution | `tool.execution_start` / `tool.execution_complete` (`toolCallId`, `toolName`; failure comes from `data.success`) | session | yes | yes | medium |
+| Permission denial | `tool.execution_complete` with `error.code == "denied"` (marks permission denials only, not failures in general) | session | yes | yes | low |
 | Hook outcome | `hook.start` / `hook.end` (`hookInvocationId`, `hookType`, success, duration) | session | yes | yes | low |
 | Skill/plugin | `skill.invoked` / `skill.invoked_ref` (`name`, `pluginName`, `pluginVersion`, `agentName`) | session | yes | yes | low |
 | Workspace | `workspace.yaml` (`cwd`, `name`, `summary`, `created_at`) | session | yes | yes | medium |
@@ -185,9 +189,11 @@ Claude Code can emit OTel metrics and events when
 | Retention | Could not determine — no documented retention/cleanup was found for Copilot CLI session state. |
 | OTel / export option | Could not determine — none found in the reader or confirmed in docs. |
 
-**Note on cost completeness:** `codeChanges`, `totalPremiumRequests`, and
+**Note on completeness:** `codeChanges`, `totalPremiumRequests`, and
 `totalNanoAiu` are only guaranteed at `session.shutdown`; a live/abandoned
-session may lack them.
+session may lack them. The reader adds the per-record `usage.cost` values
+seen since the last shutdown (pending usage) to the total, so premium requests
+are still estimated before shutdown.
 
 **Official docs:** GitHub Copilot CLI —
 <https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli>. The
@@ -217,7 +223,7 @@ determine" rows.
 | --- | --- | --- | --- | --- |
 | Claude transcript JSONL | per session (pruned after `cleanupPeriodDays`, default 30d) | yes, within window | yes | medium (cwd, branch, tool I/O) |
 | Claude status-line allowance file | rolling window (5h / 7d) | yes | yes | low |
-| Claude status-line `cost.*` (not yet persisted) | per session, resets on `/clear` | no (not persisted today) | yes | low |
+| Claude status-line `cost.*` (estimate, not yet persisted) | per session, resets on `/clear` | no (not persisted today) | yes | low |
 | Claude OTel | per metric/event, exporter-dependent | only if exported to a store | needs local receiver | higher (prompt attrs, off by default) |
 | Copilot session state | per session; some totals cumulative at shutdown | yes | yes | medium (cwd, tool I/O) |
 | msdc-harness evidence | per activation / per version | yes | yes | low |
@@ -249,8 +255,8 @@ determine" rows.
 **OTel capture — defer.** A loopback OTLP receiver is feasible and consistent
 with ADR-0001, but the per-shell environment-variable burden on the user is
 high, the data overlaps with what the files already give us (cost, tokens,
-lines), and the `api_request` event can carry prompts (off by default, but a
-larger privacy surface than the files). It is not worth it now; revisit only if
+lines), and the `user_prompt` and `assistant_response` events can carry prompt and
+response text (redacted by default, but a larger privacy surface than the files). It is not worth it now; revisit only if
 a metric we need (e.g. commit/PR counts, active time) proves unavailable from
 the files.
 

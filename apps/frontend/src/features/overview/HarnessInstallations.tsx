@@ -44,7 +44,9 @@ export const HarnessInstallations = () => {
         <Button
           variant="outline"
           size="sm"
-          disabled={check.isPending || updates.data?.some((state) => state.status === "checking" || state.status === "pending")}
+          disabled={
+            check.isPending || updates.data?.some((state) => state.status === "checking" || state.status === "pending")
+          }
           onClick={() => check.mutate()}
         >
           Check for plugin updates
@@ -52,7 +54,11 @@ export const HarnessInstallations = () => {
       </CardHeader>
       <CardContent>
         {updates.isError && (
-          <QueryErrorAlert title="Could not check plugin updates" error={updates.error} onRetry={() => void updates.refetch()} />
+          <QueryErrorAlert
+            title="Could not check plugin updates"
+            error={updates.error}
+            onRetry={() => void updates.refetch()}
+          />
         )}
         {query.isPending ? (
           <p role="status" className="text-sm text-muted-foreground">
@@ -69,19 +75,25 @@ export const HarnessInstallations = () => {
             {query.data.map((inventory) => (
               <div key={inventory.source} className="space-y-2 rounded-md border p-3">
                 <SourceBadge source={inventory.source} />
-                {updates.data?.filter((state) => state.source === inventory.source).map((state) => (
-                  <div key={state.source} className="space-y-2 text-sm">
-                    {state.status === "checking" || state.status === "pending" ? <p role="status">Checking for updates...</p> : null}
-                    {state.status === "updating" ? <p role="status">Updating in the background...</p> : null}
-                    {state.error ? <p role="alert">{state.error}</p> : null}
-                    {state.status === "succeeded" ? <p role="status">Updated to {state.latestVersion}. Restart the CLI.</p> : null}
-                    {state.available && state.status !== "updating" ? (
-                      <Button size="sm" disabled={update.isPending} onClick={() => update.mutate(state.source)}>
-                        Update {state.source} to {state.latestVersion}
-                      </Button>
-                    ) : null}
-                  </div>
-                ))}
+                {updates.data
+                  ?.filter((state) => state.source === inventory.source)
+                  .map((state) => (
+                    <div key={state.source} className="space-y-2 text-sm">
+                      {state.status === "checking" || state.status === "pending" ? (
+                        <p role="status">Checking for updates...</p>
+                      ) : null}
+                      {state.status === "updating" ? <p role="status">Updating in the background...</p> : null}
+                      {state.error ? <p role="alert">{state.error}</p> : null}
+                      {state.status === "succeeded" ? (
+                        <p role="status">Updated to {state.latestVersion}. Restart the CLI.</p>
+                      ) : null}
+                      {state.available && state.status !== "updating" ? (
+                        <Button size="sm" disabled={update.isPending} onClick={() => update.mutate(state.source)}>
+                          Update {state.source} to {state.latestVersion}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ))}
                 {inventory.status === "installed" ? (
                   inventory.installations.map((plugin, index) => (
                     <p key={`${plugin.version}-${plugin.scope}-${index}`} className="text-sm font-medium">

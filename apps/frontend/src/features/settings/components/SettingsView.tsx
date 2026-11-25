@@ -10,7 +10,9 @@ export const SettingsView = () => {
 
   if (query.isPending) return <Skeleton className="h-40 w-full" role="status" aria-label="Loading settings" />;
   if (query.isError) {
-    return <QueryErrorAlert title="Could not load the settings" error={query.error} onRetry={() => void query.refetch()} />;
+    return (
+      <QueryErrorAlert title="Could not load the settings" error={query.error} onRetry={() => void query.refetch()} />
+    );
   }
 
   const { terminal, terminals } = query.data;

@@ -1,6 +1,8 @@
 # ai-session-stats
 A tool for visualizing ai sessions, their tool calls and other relevant performance metrics
 
+Contributing, including the protocol for AI agents: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Evolve: find skill opportunities
 
 Open **Evolve** to analyze one session or all Copilot and Claude CLI sessions recorded in the

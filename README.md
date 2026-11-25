@@ -21,11 +21,21 @@ and a preview of harness health. **Sessions** now lives at `/sessions`; session-
 unchanged. **Harness** (`/harness`) shows local installed-plugin inventories, observed harness
 versions, supporting sessions, and attributed tool/hook failure rates.
 
-Installed versions are discovered using read-only `claude plugin list --json` and
-`copilot plugin list --json`, never the plugin update command. Historical evidence is separate:
-Claude versions are inferred from recorded startup/resume hook paths; Copilot versions identify
-individual recorded skill invocations. Missing evidence stays unknown, and a session can contain
-multiple versions. No plugin update or access to plugin source is required.
+Installed versions are read with `claude plugin list --json` and `copilot plugin list --json`.
+Historical evidence is separate: Claude versions are inferred from recorded startup/resume hook
+paths; Copilot versions identify individual recorded skill invocations. Missing evidence stays
+unknown, and a session can contain multiple versions. Historical evidence needs no plugin update
+or access to plugin source.
+
+Update checks are not read-only. At startup, every 4 hours, and when you select **Check for plugin
+updates**, the backend runs `plugin marketplace update msdc-plugins` for each CLI that has the MSDC
+harness installed at user scope. That command contacts the marketplace source, and the backend then
+reads the latest `msdc-harness` version from the refreshed catalog. For Claude Code this refreshes
+the CLI's own marketplace cache. For Copilot the backend uses a temporary cache that is deleted
+afterwards, so the CLI's own cache is not refreshed. `plugin update msdc-harness@msdc-plugins` runs
+only after you select that CLI's **Update `<cli>` to `<version>`** button, and the new version is then
+verified with `plugin list --json`. Only user-scoped installations are touched: if a CLI also has a
+project, local or managed installation, checks and updates are refused for that CLI.
 
 Comparisons keep providers and recorded CLI versions separate. They describe session health,
 not proof that the harness caused a failure; project, task, and model differences still matter.
@@ -33,8 +43,9 @@ Attribution coverage and supporting sessions remain visible. Lifetime token tota
 assigned to a harness version. Claude subscription limits are shown only when provided by
 Claude Code's local status line; they are never estimated from session tokens.
 
-This feature runs locally and does not invoke models or send telemetry. It retains only
-allowlisted version evidence and metrics, not raw hook output or installation paths. See
+This feature makes no model calls and sends no telemetry; update checks do contact the plugin
+marketplace. It retains only allowlisted version evidence and metrics, not raw hook output or
+installation paths. See
 `docs/api-contract.md` for attribution rules and supported CLI metadata shapes.
 
 The dashboard's Claude allowance card reads the 5-hour and 7-day subscription limits from

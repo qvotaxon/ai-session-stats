@@ -27,7 +27,7 @@ The consumers of this store are:
   cost never shown without delivered-work data, and Claude and Copilot never summed unless
   `docs/metrics.md` declares them comparable.
 
-All three read, not write. The queries are small: group a bounded number of daily rows by day,
+All three read, not write. The queries are small: group contribution rows by day,
 week, source, project and harness version. There is no need for ad-hoc SQL, joins across large
 tables, or sub-second query latency over millions of rows. A single developer machine produces at
 most a few sessions a day.
@@ -39,21 +39,20 @@ approval (new NuGet dependencies require owner approval).
 
 ## Options
 
-### 1. Daily aggregate JSON-lines files, one file per month
+### 1. Contribution JSON-lines files, one file per month
 
-`snapshots/YYYY-MM.jsonl`, one JSON object per line, one line per `(session, day, source, project
-hash, model, harness evidence, harness version, CLI version)` tuple. A row is merged by reading the
-current month file, upserting the affected lines under the never-shrink rule below, and writing the
-file once.
+`snapshots/YYYY-MM.jsonl`, one JSON object per metric contribution, keyed by stable source,
+session and contribution identity. Daily aggregates are derived at read time. A month is updated by
+reading its file, reconciling contributions as described below, and writing it once.
 
 - Crash safety: write to `YYYY-MM.jsonl.tmp` and atomically replace. This is new code: the
   existing stores (`ExcludedSessionsStore.cs:49`, `TerminalSettingsStore.cs:54`,
   `ReportCoordinator.cs:347`) write in place with `WriteAllText`, and only `claude-statusline.ps1`
   (lines 55-61) uses temp-and-replace. A torn
   line is isolated to one month and one day; the reader skips malformed lines and logs.
-- Size: a dense upper bound is roughly 365 days x a handful of sources/projects/models x ~400
-  bytes, i.e. low single-digit megabytes a year, far less in practice because a solo user hits few
-  combinations a day. Monthly sharding keeps any single rewrite small.
+- Size: proportional to the number of contributions, not daily combinations; this is larger than
+  daily rollups and depends on transcript activity. Measure a representative year before
+  implementation; monthly sharding bounds each rewrite.
 - Query: read the relevant month files, parse lines, group in memory. Trivial for a year of data.
 - Backup/uninstall: plain text files under the data root; copy to back up, removed on uninstall
   with everything else. Human-readable and diffable.
@@ -88,21 +87,34 @@ A single `snapshots.db` with one table keyed by the tuple above.
 
 ## Decision
 
-Adopt **option 1: daily aggregate JSON-lines files, one file per month**, under
+Adopt **option 1: contribution JSON-lines files, one file per month**, under
 `snapshots/YYYY-MM.jsonl` in the data root resolved by `SessionInsightsOptions.ResolveDataRoot()`.
 
 - The store reuses the existing `IFileSystem` abstraction and `System.Text.Json`, and adds a `Lock`
   gate for concurrent writes. Writes go to a `.tmp` sibling and atomically replace the target, so a
   kill mid-write leaves the previous file intact. The existing stores do not do this (they write in
   place), so the temp-and-replace write is new code in this store, not a reused pattern.
-- The unit of storage is a **per-session daily aggregate row**: the rolled-up total for one session
-  on one day for one model, not a per-message record. Session identity is part of the key so that
-  totals are sums over rows and a pruned transcript affects only its own session's rows.
-- **Never-shrink rule.** Re-indexing upserts rows by the key below and never replaces a stored value
-  with a smaller recomputed one. For each measure the stored value is kept when the recomputed one
-  is lower (a transcript partly pruned, or a session only partly readable), and rows for sessions
-  no longer readable are left untouched. The key makes repeated runs idempotent, so they never
-  double-count, and the rule means pruning never shrinks stored history (#69).
+- The unit of storage is a **metric contribution** from a source event or a stable source-defined
+  usage unit, not a session/day total. Its identity is independent of attribution and measures.
+  Readers derive per-session/day aggregates by summing each distinct contribution once.
+- **Overlap-aware reconciliation.** Upsert by the stable identity below, not by a recomputed
+  aggregate. Leave unseen contributions untouched, replace an observed contribution only with a
+  trustworthy revision of that same unit, and insert newly observed contributions once. For example,
+  after contributions 10 and 20 are stored, a partial read of 20 and new 15 retains 10 and totals
+  45; repeated reads remain 45. Cumulative source values must be reconciled as revisions of the
+  same unit, not added as independent deltas.
+- **Attribution reconciliation.** Harness evidence, version and other grouping fields are mutable
+  attributes, not identity. A partial read or missing evidence must not downgrade previously
+  observed attribution. When complete, authoritative evidence establishes a correction, replace
+  the old attributes on the same contribution, including corrections to unknown; do not retain
+  another copy in the old group. Without sufficient evidence retain the last known attribution and
+  mark it uncertain rather than infer a correction. Queries sum the contribution only in its current
+  group.
+- A source adapter must establish identities that survive rereads and partial pruning, and
+  distinguish trustworthy revisions from incomplete observations. It must not use a line offset,
+  mutable attribution, or a hash of prompt/response content as identity. If it cannot establish
+  identity or revision completeness for a source, do not claim exact deduplication or pruning
+  safety for that data: leave previously stored values intact and surface the coverage limitation.
 - Reads load the month files in the requested range and group in memory. This covers #70, #72 and
   #77 without a query engine.
 - Rows are grouped by month file only; a day's rows are confined to one file, bounding every
@@ -110,14 +122,19 @@ Adopt **option 1: daily aggregate JSON-lines files, one file per month**, under
 
 ### Record schema
 
-Each JSON-lines row is one aggregate for one session, one day and one key combination.
+Each JSON-lines row is one metric contribution, assigned to the month of its `day`.
 
 Key fields (identity of the row):
 
-- `sessionId` — the CLI's opaque session identifier (not a path or name). It drives the
-  never-shrink upsert and gives #69's rows keyed by session id and day.
-- `day` — local date, `YYYY-MM-DD`.
 - `source` — `claude` or `copilot`.
+- `sessionId` — the CLI's opaque session identifier (not a path or name).
+- `contributionId` — a stable opaque identifier within the source and session, based on a
+  source-provided unit identity and its metric kind. Adapters must verify its uniqueness and
+  stability; do not fabricate one from mutable data or assume every source supplies one.
+
+Grouping and provenance fields (not identity):
+
+- `day` — local date, `YYYY-MM-DD`.
 - `projectHash` — a salted, non-reversible hash of the project path (never the path itself).
 - `model` — model identifier as reported by the CLI.
 - `harnessEvidence` — how harness use was observed: `activation` (Claude hook-path activation,
@@ -128,10 +145,16 @@ Key fields (identity of the row):
   `invocation` means active with unknown version; `none` always carries null.
 - `cliVersion` — the CLI version the data was read from (the transcript format is internal, so the
   version is recorded for provenance).
+- Attribution confidence and revision provenance — sufficient to distinguish an incomplete read
+  from authoritative evidence for a correction. If a correction changes the day or month, move
+  the contribution without leaving a second query-visible copy; cross-month moves need an atomic
+  recovery protocol before they are supported.
 
-Measure fields (sums over that day and key):
+Measure fields (the contribution's values, summed only once):
 
-- Tokens by type: `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`.
+- Tokens by type: `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, and
+  `reasoningTokens`. Reasoning is a subset of output and must not be added again to totals
+  (`TokenUsage.Total`, `SessionMetrics.cs:22-23`).
 - Cost, one nullable field per unit, because Copilot reports premium requests and nano-AIU
   (`CostInfo(PremiumRequests, NanoAiu)`, `SessionMetrics.cs:63`), not dollars: `costUsd`,
   `costPremiumRequests` and `costNanoAiu`. Each is null when that unit has no source, so no unit is
@@ -168,42 +191,42 @@ guaranteed, is an **open question** for implementation.
 
 ### Never stored
 
-The store records only aggregated counts, costs and the keys above. It **never** stores prompt or
-response text, tool arguments or tool output, file contents, file paths or project names (only the
-salted `projectHash`), session recaps, per-message detail, usernames, machine identifiers, or any
+The store records only metric counts, costs and the identifiers and attributes above. It **never**
+stores prompt or response text, tool arguments or tool output, file contents, file paths or project names (only the
+salted `projectHash`), session recaps, message content, usernames, machine identifiers, or any
 Claude or Copilot credentials or API-credit balances. This keeps ADR-0001's metrics-only boundary
 intact for the persisted copy.
 
 ### Retention policy
 
-Default: **keep forever.** The store is append-and-update only and is never auto-pruned, because the
-point of the store is to outlive transcript retention. The user can clear the store from Settings,
+Default: **keep forever.** The store retains contributions through corrections and is never
+auto-pruned, because its purpose is to outlive transcript retention. The user can clear it from Settings,
 which deletes the `snapshots/` directory; the uninstaller removes it with the rest of the data root
-(`README.md:62`). No time-based auto-deletion is added, so trends remain complete unless the user
-chooses to clear them.
+(`README.md:62`). No time-based auto-deletion is added; trends are subject to the source coverage
+limitations above and to any data the user chooses to clear.
 
 ### Back-fill on first run
 
 On first run after this store ships, Session Insights back-fills from the transcripts still present:
-it indexes the Claude and Copilot sessions it can still read, aggregates them into per-session
-daily rows, and writes the month files. Back-fill covers only the retained transcripts, so history
-before the CLIs' retention window cannot be recovered and is simply absent. Back-fill follows the
-same never-shrink rule and is idempotent (keyed by the tuple), so re-indexing upserts rather than
-appends or replaces, and a crash mid-back-fill can be safely re-run. After back-fill, the store is the durable source for trends even once the
-underlying
-transcripts are deleted.
+it indexes the Claude and Copilot sessions it can still read and reconciles their contributions into
+the month files. Back-fill covers only the retained transcripts, so history before the CLIs'
+retention window cannot be recovered and is simply absent. Back-fill uses the same identity and
+reconciliation rules as subsequent indexing, so a crash can be safely re-run without duplicates.
+Only successfully identified and persisted contributions survive deletion of the underlying
+transcripts.
 
 ## Consequences
 
 - No new package and no owner approval needed; the store reuses the existing JSON + `IFileSystem`
   approach. The atomic temp-and-replace write is new code here, not a reused pattern.
-- Keying by session makes sums valid and keeps history intact after pruning, at the cost of more
-  rows (one per session per day per model) than a pure daily rollup; still small at this scale.
+- Stable contribution identities preserve observed history across partial pruning and permit
+  attribution corrections without double-counting, at the cost of more rows than daily rollups.
+  Source identity and revision guarantees must be validated before implementation.
 - Files are human-readable and diffable, easy to back up and inspect, and a corruption is contained
   to one month with malformed lines skipped.
 - In-memory grouping is adequate at single-developer scale; if data volume ever outgrows this (for
   example a shared or multi-user deployment), this ADR is revisited and SQLite reconsidered.
-- Keeping data forever means the store only ever grows until the user clears it, but the yearly size
-  is small and sharded by month.
+- Keeping data forever means the store grows until the user clears it; size is activity-dependent
+  and sharded by month.
 - Back-fill cannot reconstruct history older than the CLIs' own retention, so the earliest trends
   begin at the oldest transcript present on first run.

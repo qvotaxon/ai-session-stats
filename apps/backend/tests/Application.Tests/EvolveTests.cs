@@ -43,7 +43,8 @@ public sealed class EvolveTests
         suggestion.Id.ShouldBe("skill");
         suggestion.Occurrences.ShouldBe(2);
         suggestion.SessionCount.ShouldBe(2);
-        suggestion.Evidence.Select(e => e.SessionId).ShouldBe([.. new[] { a.Id, b.Id }.Order(StringComparer.Ordinal)]);
+        // The handler passes the analyzer's evidence through untouched; ordering is the analyzer's job (see SkillAnalyzerTests).
+        suggestion.Evidence.Select(e => e.SessionId).ShouldBe([a.Id, b.Id]);
         analyzer.Sessions.Select(s => s.Id).ShouldBe([a.Id, b.Id]);
         analyzer.From.ShouldBe(Start);
         analyzer.To.ShouldBe(Start.AddHours(1));

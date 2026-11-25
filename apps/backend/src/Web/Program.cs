@@ -40,7 +40,10 @@ builder.Host.UseSerilog((context, services, logger) => logger
         Path.Combine(bootstrap.ResolveDataRoot(), "logs", "session-insights-.log"),
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 14,
-        shared: true));
+        shared: true),
+    // Each host keeps its own logger: the static Log.Logger is process-wide, so hosts that share a process (the web tests) would
+    // otherwise route Microsoft.Extensions.Logging to whichever host was built last, and close it when that host is disposed.
+    preserveStaticLogger: true);
 
 // Loopback only: Kestrel never listens on another interface, whatever ASPNETCORE_URLS says.
 builder.WebHost.ConfigureKestrel(kestrel => kestrel.Listen(IPAddress.Loopback, bootstrap.Port));

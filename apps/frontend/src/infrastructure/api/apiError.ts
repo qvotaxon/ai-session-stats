@@ -17,7 +17,13 @@ export class ApiError extends Error {
   /** Machine-readable ProblemDetails extension, e.g. `session_active`. */
   readonly code: string | null;
 
-  constructor(message: string, status: number | null, title: string, detail: string | null, code: string | null = null) {
+  constructor(
+    message: string,
+    status: number | null,
+    title: string,
+    detail: string | null,
+    code: string | null = null,
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;

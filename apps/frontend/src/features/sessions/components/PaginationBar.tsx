@@ -17,7 +17,8 @@ const getPageItems = (page: number, total: number): (number | "ellipsis-start" |
   const items: (number | "ellipsis-start" | "ellipsis-end")[] = [];
   sorted.forEach((p, i) => {
     const prev = sorted[i - 1];
-    if (prev !== undefined && p - prev > 1) items.push(p - prev === 2 ? prev + 1 : i < 2 ? "ellipsis-start" : "ellipsis-end");
+    if (prev !== undefined && p - prev > 1)
+      items.push(p - prev === 2 ? prev + 1 : i < 2 ? "ellipsis-start" : "ellipsis-end");
     items.push(p);
   });
   return items;

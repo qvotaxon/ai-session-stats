@@ -22,47 +22,65 @@ describe("Harness installation completion notifications", () => {
     ["error", "succeeded", "Marketplace check failed.", null],
     ["updating", "succeeded", null, null],
   ] as const)("uses the saved %s completion outcome %s", async (status, completionStatus, error, completionError) => {
-    vi.mocked(overviewApi.updates).mockResolvedValue([{
-      source: "copilot",
-      status,
-      latestVersion: "1.1.0",
-      available: false,
-      checkedAt: "2026-11-18T10:00:00Z",
-      completedAt: `2026-11-18T09:00:0${["checking", "checked", "error", "updating"].indexOf(status)}Z`,
-      error,
-      completionStatus,
-      completionError,
-    }]);
+    vi.mocked(overviewApi.updates).mockResolvedValue([
+      {
+        source: "copilot",
+        status,
+        latestVersion: "1.1.0",
+        available: false,
+        checkedAt: "2026-11-18T10:00:00Z",
+        completedAt: `2026-11-18T09:00:0${["checking", "checked", "error", "updating"].indexOf(status)}Z`,
+        error,
+        completionStatus,
+        completionError,
+      },
+    ]);
     const client = createTestQueryClient();
     const invalidate = vi.spyOn(client, "invalidateQueries");
-    const view = render(<QueryClientProvider client={client}><HarnessInstallations /></QueryClientProvider>);
+    const view = render(
+      <QueryClientProvider client={client}>
+        <HarnessInstallations />
+      </QueryClientProvider>,
+    );
 
-    await waitFor(() => expect(showToast).toHaveBeenCalledWith(
-      completionStatus === "error" ? "error" : "success",
-      `copilot MSDC harness ${completionStatus === "error" ? "update failed" : "updated"}`,
-      completionError ?? "Restart the CLI to use the new version.",
-    ));
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith(
+        completionStatus === "error" ? "error" : "success",
+        `copilot MSDC harness ${completionStatus === "error" ? "update failed" : "updated"}`,
+        completionError ?? "Restart the CLI to use the new version.",
+      ),
+    );
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["harness", "installations"] });
     view.unmount();
-    render(<QueryClientProvider client={client}><HarnessInstallations /></QueryClientProvider>);
+    render(
+      <QueryClientProvider client={client}>
+        <HarnessInstallations />
+      </QueryClientProvider>,
+    );
     await waitFor(() => expect(overviewApi.updates).toHaveBeenCalled());
     expect(showToast).toHaveBeenCalledTimes(1);
   });
 
   it("reports completion and update availability independently", async () => {
-    vi.mocked(overviewApi.updates).mockResolvedValue([{
-      source: "copilot",
-      status: "succeeded",
-      latestVersion: "2.0.0",
-      available: true,
-      checkedAt: "2026-11-18T10:00:00Z",
-      completedAt: "2026-11-18T09:30:00Z",
-      error: null,
-      completionStatus: "succeeded",
-      completionError: null,
-    }]);
+    vi.mocked(overviewApi.updates).mockResolvedValue([
+      {
+        source: "copilot",
+        status: "succeeded",
+        latestVersion: "2.0.0",
+        available: true,
+        checkedAt: "2026-11-18T10:00:00Z",
+        completedAt: "2026-11-18T09:30:00Z",
+        error: null,
+        completionStatus: "succeeded",
+        completionError: null,
+      },
+    ]);
     const client = createTestQueryClient();
-    const view = render(<QueryClientProvider client={client}><HarnessInstallations /></QueryClientProvider>);
+    const view = render(
+      <QueryClientProvider client={client}>
+        <HarnessInstallations />
+      </QueryClientProvider>,
+    );
 
     await waitFor(() => {
       expect(showToast).toHaveBeenCalledWith(
@@ -70,11 +88,7 @@ describe("Harness installation completion notifications", () => {
         "copilot MSDC harness updated",
         "Restart the CLI to use the new version.",
       );
-      expect(showToast).toHaveBeenCalledWith(
-        "info",
-        "copilot MSDC harness update available",
-        "Version 2.0.0",
-      );
+      expect(showToast).toHaveBeenCalledWith("info", "copilot MSDC harness update available", "Version 2.0.0");
     });
     view.unmount();
   });

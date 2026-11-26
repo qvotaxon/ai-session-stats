@@ -80,6 +80,16 @@ automatically when ready. As with any local website, the address cannot respond 
 the server process starts listening; the installed launch paths cover that earlier gap
 with their local startup page.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main` with read-only permissions.
+
+- `backend` (Windows): .NET build and test of `SessionInsights.slnx`.
+- `frontend` (Ubuntu): install, lint, test and build of `apps/frontend`.
+- `scripts` (Windows): the three PowerShell tests in `scripts/tests` and the Node startup-page test.
+
+The release workflows still run their own `release-validation`.
+
 ## Windows releases and updates
 
 Releases use [release-please](https://github.com/googleapis/release-please) and [Conventional Commits](https://www.conventionalcommits.org/) on `main`: `fix:` bumps the patch version, `feat:` the minor version, and `!` / `BREAKING CHANGE:` a breaking bump (minor while below 1.0.0); other types (`chore:`, `docs:`, ...) do not release. After owner approval, merges open or update a release PR that updates `CHANGELOG.md` and `version.txt`; merging that PR tags `vX.Y.Z` and creates a draft GitHub Release, also after approval. Read-only build jobs produce `SessionInsights-win-x64.zip` and its `.sha256` file, then build `SessionInsights-Setup.exe` (Inno Setup, `scripts/installer`) from that zip. A separate owner-approved publishing job uploads all four assets and publishes the release; it never checks out or executes application code. If validation, build, or upload fails, the stable release remains a draft; rerun the failed workflow jobs to complete it. The archive includes the self-contained Windows x64 application, frontend, and installation/update scripts. It does not require the .NET runtime or SDK on the target machine. Releases are framework-independent; prereleases are not offered to the tray updater.

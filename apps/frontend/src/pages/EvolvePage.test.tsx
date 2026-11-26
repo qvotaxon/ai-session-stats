@@ -98,3 +98,11 @@ it("clears consent and previous results when the selected CLI changes", async ()
   expect(screen.queryByText(/Analyzed 2 requests/)).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Analyze" })).toBeDisabled();
 });
+
+it("does not claim the analysis is local or model-free", async () => {
+  renderApp("/evolve");
+  await screen.findByRole("heading", { name: "Evolve" });
+  expect(screen.getByText("Find recurring requests that could become reusable skills.")).toBeInTheDocument();
+  expect(screen.queryByText(/uses no AI models/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/stays on this device/i)).not.toBeInTheDocument();
+});

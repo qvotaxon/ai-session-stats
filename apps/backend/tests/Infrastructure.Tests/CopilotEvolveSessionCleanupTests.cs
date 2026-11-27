@@ -313,4 +313,12 @@ public sealed class CopilotEvolveSessionCleanupTests
         Create().Exists(file).ShouldBeTrue();
         Create().Exists(NewId()).ShouldBeFalse();
     }
+
+    [Fact]
+    public void Exists_rejects_a_non_guid_id_even_when_a_folder_with_that_name_exists()
+    {
+        fs.AddDirectory($@"{StateRoot}\not-a-guid");
+
+        Create().Exists("not-a-guid").ShouldBeFalse();
+    }
 }

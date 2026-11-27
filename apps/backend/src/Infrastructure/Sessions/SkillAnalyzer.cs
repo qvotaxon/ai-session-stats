@@ -24,6 +24,18 @@ internal sealed class SkillAnalyzer(
     private const int MaxPromptLength = 1000;
     private static readonly TimeSpan AnalysisTimeout = TimeSpan.FromMinutes(2);
 
+    // The six characters backslash, u, 0, 0, 4, 0: the JSON escape for '@'.
+    private const string EscapedAt = "\\" + "u0040";
+
+    // No -p: with -p the CLI ignores stdin and a multi-line argument is cut at the first newline (#99).
+    private static readonly string[] CopilotArguments =
+    [
+        "--silent", "--no-custom-instructions", "--disable-builtin-mcps",
+        "--disable-mcp-server", "computer-use", "--no-ask-user",
+        "--deny-tool", "shell", "--deny-tool", "write", "--deny-tool", "read",
+        "--deny-tool", "url", "--deny-tool", "memory",
+    ];
+
     private sealed record PromptExample(string Id, string Text, string SessionId, string SessionTitle);
     private sealed record SuggestedSkill(string? Title, string? Description, string? Instructions, string[]? RequestIds);
 
@@ -67,7 +79,9 @@ internal sealed class SkillAnalyzer(
         var input = JsonSerializer.Serialize(examples.Select(example => new { id = example.Id, prompt = example.Text }));
         var arguments = cli == SessionSource.Claude
             ? new[] { "-p", prompt, "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--settings", """{"disableAllHooks":true}""" }
-            : new[] { "-p", prompt, "--silent", "--no-custom-instructions", "--disable-builtin-mcps", "--deny-tool", "*", "--deny-url", "*" };
+            : CopilotArguments;
+        // The Copilot CLI turns "@<path>" in piped input into a file attachment, so escape it (same JSON meaning).
+        var standardInput = cli == SessionSource.Claude ? input : $"{prompt}\n\n{input.Replace("@", EscapedAt)}";
         var environment = CliEnvironment(cli);
 
         ProcessResult result;
@@ -79,7 +93,7 @@ internal sealed class SkillAnalyzer(
             {
                 Directory.CreateDirectory(SkillAnalysisActivity.WorkingDirectory);
                 result = await processes.RunAsync(
-                    new ProcessSpec(executable, arguments, SkillAnalysisActivity.WorkingDirectory, environment, input),
+                    new ProcessSpec(executable, arguments, SkillAnalysisActivity.WorkingDirectory, environment, standardInput),
                     linked.Token);
             }
         }

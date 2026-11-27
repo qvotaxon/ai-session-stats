@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using NSubstitute;
@@ -16,6 +18,7 @@ namespace SessionInsights.Infrastructure.Tests;
 public sealed class SkillAnalyzerTests
 {
     private static readonly DateTimeOffset Start = new(2026, 1, 10, 10, 0, 0, TimeSpan.Zero);
+    private static readonly Regex SafeArgument = new(@"^[A-Za-z0-9_.=,-]+\z");
     private readonly IExecutableLocator locator = Substitute.For<IExecutableLocator>();
     private readonly IProcessRunner processes = Substitute.For<IProcessRunner>();
     private readonly ISkillAnalysisActivity activity = new SkillAnalysisActivity();
@@ -24,7 +27,8 @@ public sealed class SkillAnalyzerTests
     public async Task Uses_local_cli_and_turns_repeated_requests_into_instructions_with_evidence()
     {
         locator.Locate("copilot").Returns("/usr/bin/copilot");
-        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>())
+        ProcessSpec? captured = null;
+        processes.RunAsync(Arg.Do<ProcessSpec>(spec => captured = spec), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessResult(0,
                 """{"opportunities":[{"title":"Release notes","description":"Repeated release requests.","instructions":"# Release notes\n\n1. Review merged changes.","requestIds":["R001","R002","R999"]}]}""",
                 string.Empty)));
@@ -60,17 +64,80 @@ public sealed class SkillAnalyzerTests
         suggestion.Occurrences.ShouldBe(2);
         suggestion.SessionCount.ShouldBe(2);
         suggestion.Evidence.Select(item => item.SessionId).Order(StringComparer.Ordinal).ShouldBe(["session-a", "session-b"]);
-        await processes.Received(1).RunAsync(
-            Arg.Is<ProcessSpec>(spec =>
-                spec.FileName == "/usr/bin/copilot"
-                && spec.WorkingDirectory == SkillAnalysisActivity.WorkingDirectory
-                && spec.StandardInput != null
-                && spec.Arguments.Contains("--deny-tool")
-                && spec.Arguments.Contains("--no-custom-instructions")
-                && !spec.Arguments.Any(argument => argument.Contains("Prepare release notes"))
-                && spec.StandardInput.Contains("Prepare release notes")
-                && !spec.StandardInput.Contains("outside the selected range")),
-            Arg.Any<CancellationToken>());
+        await processes.Received(1).RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>());
+        captured.ShouldNotBeNull();
+        captured.FileName.ShouldBe("/usr/bin/copilot");
+        captured.WorkingDirectory.ShouldBe(SkillAnalysisActivity.WorkingDirectory);
+        captured.Arguments.ShouldBe(
+        [
+            "--silent", "--no-custom-instructions", "--disable-builtin-mcps",
+            "--disable-mcp-server", "computer-use", "--no-ask-user",
+            "--deny-tool", "shell", "--deny-tool", "write", "--deny-tool", "read",
+            "--deny-tool", "url", "--deny-tool", "memory",
+        ]);
+        captured.Arguments.ShouldNotContain("-p");
+        captured.Arguments.ShouldAllBe(argument => SafeArgument.IsMatch(argument));
+        captured.Arguments.ShouldNotContain(argument => argument.Contains("Prepare release notes"));
+        captured.StandardInput.ShouldNotBeNull();
+        captured.StandardInput.ShouldStartWith("Find repeated task patterns");
+        captured.StandardInput.ShouldContain("Prepare release notes");
+        captured.StandardInput.ShouldNotContain("outside the selected range");
+        captured.StandardInput.IndexOf("Analyze the JSON requests", StringComparison.Ordinal)
+            .ShouldBeLessThan(captured.StandardInput.IndexOf("Prepare release notes", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Argument_allow_list_rejects_a_trailing_newline()
+    {
+        SafeArgument.IsMatch("--silent").ShouldBeTrue();
+        SafeArgument.IsMatch("--silent\n").ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Copilot_input_escapes_at_signs_without_changing_the_json_meaning()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        ProcessSpec? captured = null;
+        processes.RunAsync(Arg.Do<ProcessSpec>(spec => captured = spec), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty)));
+        const string request = @"Summarize @C:\x\secret.txt and mail a@b.example";
+
+        await AnalyzeAtRequests(SessionSource.Copilot, request);
+
+        captured.ShouldNotBeNull();
+        captured.StandardInput.ShouldNotBeNull();
+        var data = captured.StandardInput[captured.StandardInput.IndexOf("[{\"id\"", StringComparison.Ordinal)..];
+        data.ShouldNotContain("@");
+        data.ShouldContain(@"\u0040C:\\x\\secret.txt");
+        using var document = JsonDocument.Parse(data);
+        document.RootElement[0].GetProperty("prompt").GetString().ShouldBe(request);
+    }
+
+    [Fact]
+    public async Task Claude_input_keeps_at_signs_and_stays_the_bare_json()
+    {
+        locator.Locate("claude").Returns("/usr/bin/claude");
+        ProcessSpec? captured = null;
+        processes.RunAsync(Arg.Do<ProcessSpec>(spec => captured = spec), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessResult(0, """{"result":"{\"opportunities\":[]}"}""", string.Empty)));
+
+        await AnalyzeAtRequests(SessionSource.Claude, @"Summarize @C:\x\secret.txt");
+
+        captured.ShouldNotBeNull();
+        captured.StandardInput.ShouldBe("""[{"id":"R001","prompt":"Summarize @C:\\x\\secret.txt"},{"id":"R002","prompt":"Summarize @C:\\x\\secret.txt"}]""");
+    }
+
+    private async Task AnalyzeAtRequests(SessionSource cli, string request)
+    {
+        var session = new Session
+        {
+            Id = "session-a",
+            Source = cli,
+            SkillPrompts = [new SkillPrompt(request, Start), new SkillPrompt(request, Start.AddMinutes(1))],
+        };
+        var analyzer = new SkillAnalyzer(locator, processes, activity, Options());
+
+        await analyzer.AnalyzeAsync([session], null, null, cli, TestContext.Current.CancellationToken);
     }
 
     [Fact]

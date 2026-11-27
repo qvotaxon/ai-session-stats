@@ -109,8 +109,10 @@ re-assessed, not loosened.
 Positive:
 
 - A completed Evolve analysis leaves no `events.jsonl` with the digest in the user's session history.
-- Every rule is a unit test on an in-memory file system, and the five rules that matter most (the `cwd` match, the pre-existence check, the id
-  format and the link refusal, and the fully qualified root) were each shown to fail a test when removed.
+- Every safety-critical rule (the `cwd` comparison, the presence of the `cwd` key, the pre-existence check, the id format, the link refusal and
+  the fully qualified root) has a unit test on an in-memory file system that turns red when the rule is removed; a review ran 26 mutants
+  against them. Two extra layers cannot be reached by a test because a GUID id is always a direct child: the direct-child check and the
+  id check inside `Exists`.
 
 Negative:
 

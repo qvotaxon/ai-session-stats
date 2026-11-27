@@ -108,11 +108,12 @@ public sealed class CopilotEvolveSessionCleanupTests
     [Fact]
     public async Task Keeps_folder_when_workspace_has_no_cwd()
     {
-        var id = AddSession(yaml: $"id: {NewId()}\nname: x\n");
+        var id = NewId();
+        AddSession(id, yaml: $"id: {id}\nname: x\n");
 
         var outcome = await Create().RemoveAsync(id, false, TestContext.Current.CancellationToken);
 
-        outcome.ShouldBeOneOf(EvolveSessionCleanupOutcome.CwdMismatch, EvolveSessionCleanupOutcome.IdMismatch);
+        outcome.ShouldBe(EvolveSessionCleanupOutcome.CwdMismatch);
         SessionIntact(id).ShouldBeTrue();
     }
 

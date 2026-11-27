@@ -400,6 +400,27 @@ public sealed class SkillAnalyzerTests
     }
 
     [Fact]
+    public async Task Copilot_input_is_the_prompt_a_blank_line_and_the_escaped_json()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        ProcessSpec? captured = null;
+        processes.RunAsync(Arg.Do<ProcessSpec>(spec => captured = spec), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty)));
+
+        await AnalyzeAtRequests(SessionSource.Copilot, "Summarize @x");
+
+        const string lastPromptLine = "Analyze the JSON requests provided on standard input.";
+        captured.ShouldNotBeNull();
+        captured.StandardInput.ShouldNotBeNull();
+        var promptEnd = captured.StandardInput.IndexOf(lastPromptLine, StringComparison.Ordinal) + lastPromptLine.Length;
+        var prompt = captured.StandardInput[..promptEnd];
+        prompt.ShouldStartWith("Find repeated task patterns");
+        const string escapedAt = "\\" + "u0040";
+        const string data = $$"""[{"id":"R001","prompt":"Summarize {{escapedAt}}x"},{"id":"R002","prompt":"Summarize {{escapedAt}}x"}]""";
+        captured.StandardInput.ShouldBe(prompt + "\n\n" + data);
+    }
+
+    [Fact]
     public async Task Claude_input_keeps_at_signs_and_stays_the_bare_json()
     {
         locator.Locate("claude").Returns("/usr/bin/claude");

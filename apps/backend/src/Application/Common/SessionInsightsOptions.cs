@@ -24,8 +24,11 @@ public sealed class SessionInsightsOptions
     public TimeSpan IndexRefreshInterval { get; set; } = TimeSpan.FromSeconds(15);
 
     public string ResolveCopilotRoot() =>
-        !string.IsNullOrWhiteSpace(CopilotRoot) ? CopilotRoot : Path.Combine(
-            FirstConfigured(CopilotHome, Environment.GetEnvironmentVariable("COPILOT_HOME")) ?? Path.Combine(UserProfile(), ".copilot"), "session-state");
+        !string.IsNullOrWhiteSpace(CopilotRoot) ? CopilotRoot : Path.Combine(ResolveCopilotHome(), "session-state");
+
+    /// <summary>The COPILOT_HOME a spawned Copilot CLI uses: the configured home, else the inherited variable, else the profile default.</summary>
+    public string ResolveCopilotHome() =>
+        FirstConfigured(CopilotHome, Environment.GetEnvironmentVariable("COPILOT_HOME")) ?? Path.Combine(UserProfile(), ".copilot");
 
     public string ResolveClaudeRoot() =>
         !string.IsNullOrWhiteSpace(ClaudeRoot) ? ClaudeRoot : Path.Combine(

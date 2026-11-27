@@ -18,7 +18,8 @@ internal sealed class SkillAnalyzer(
     IExecutableLocator locator,
     IProcessRunner processes,
     ISkillAnalysisActivity activity,
-    IOptions<SessionInsightsOptions> options) : ISkillAnalyzer
+    IOptions<SessionInsightsOptions> options,
+    IEvolveSessionCleanup cleanup) : ISkillAnalyzer
 {
     private const int MaxRequests = 60;
     private const int MaxPromptLength = 1000;
@@ -89,43 +90,72 @@ internal sealed class SkillAnalyzer(
 
         var prompt = BuildPrompt();
         var input = JsonSerializer.Serialize(examples.Select(example => new { id = example.Id, prompt = example.Text }));
-        var arguments = cli == SessionSource.Claude
-            ? new[] { "-p", prompt, "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--settings", """{"disableAllHooks":true}""" }
-            : CopilotArguments;
+        string[] arguments;
+        string? copilotSessionId = null;
+        var existedBeforeRun = false;
+        if (cli == SessionSource.Claude)
+        {
+            arguments = ["-p", prompt, "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--settings", """{"disableAllHooks":true}"""];
+        }
+        else
+        {
+            // The app's own id, so the session this run creates can be found and removed afterwards.
+            copilotSessionId = Guid.NewGuid().ToString("D");
+            existedBeforeRun = cleanup.Exists(copilotSessionId);
+            if (existedBeforeRun)
+            {
+                // --session-id resumes an existing session: launching would append this untrusted input to it.
+                throw new UnprocessableException("Could not start the analysis. Try again.");
+            }
+
+            arguments = [.. CopilotArguments, "--session-id", copilotSessionId];
+        }
+
         // The Copilot CLI turns "@<path>" in piped input into a file attachment, so escape it (same JSON meaning).
         var standardInput = cli == SessionSource.Claude ? input : $"{prompt}\n\n{input.Replace("@", EscapedAt)}";
         var environment = CliEnvironment(cli);
 
         ProcessResult result;
-        try
+        using (activity.BeginAnalysis())
         {
-            using (activity.BeginAnalysis())
             using (var timeout = new CancellationTokenSource(AnalysisTimeout))
             using (var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token))
             {
-                Directory.CreateDirectory(SkillAnalysisActivity.WorkingDirectory);
-                result = await processes.RunAsync(
-                    new ProcessSpec(
-                        executable,
-                        arguments,
-                        SkillAnalysisActivity.WorkingDirectory,
-                        environment,
-                        standardInput,
-                        cli == SessionSource.Claude ? null : CopilotRemovedEnvironment),
-                    linked.Token);
+                try
+                {
+                    Directory.CreateDirectory(SkillAnalysisActivity.WorkingDirectory);
+                    result = await processes.RunAsync(
+                        new ProcessSpec(
+                            executable,
+                            arguments,
+                            SkillAnalysisActivity.WorkingDirectory,
+                            environment,
+                            standardInput,
+                            cli == SessionSource.Claude ? null : CopilotRemovedEnvironment),
+                        linked.Token);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    throw new UnprocessableException("Skill analysis timed out after 2 minutes. Try a smaller date range.");
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
+                {
+                    throw new UnprocessableException($"Could not run the {cliName} CLI: {ex.Message}");
+                }
             }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            throw new UnprocessableException("Skill analysis timed out after 2 minutes. Try a smaller date range.");
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            throw new UnprocessableException($"Could not run the {cliName} CLI: {ex.Message}");
+
+            // Reached only after a normal return, never on cancel, timeout or an I/O failure while the process may
+            // still run. Inside the analysis lease so SessionIndex keeps holding the new folder back while it is
+            // removed, and outside the try so no unexpected failure is turned into an API message. CancellationToken.None:
+            // the process has ended, the cleanup is short, and skipping it on a late cancel would leave the digest behind.
+            if (copilotSessionId is not null)
+            {
+                await cleanup.RemoveAsync(copilotSessionId, existedBeforeRun, CancellationToken.None);
+            }
         }
 
         if (result.ExitCode != 0)

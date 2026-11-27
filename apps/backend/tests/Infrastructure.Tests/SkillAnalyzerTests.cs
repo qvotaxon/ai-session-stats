@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.IO.Abstractions.TestingHelpers;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using SessionInsights.Application.Common;
 using SessionInsights.Application.Sessions;
@@ -23,6 +26,52 @@ public sealed class SkillAnalyzerTests
     private readonly IExecutableLocator locator = Substitute.For<IExecutableLocator>();
     private readonly IProcessRunner processes = Substitute.For<IProcessRunner>();
     private readonly ISkillAnalysisActivity activity = new SkillAnalysisActivity();
+    private readonly MockFileSystem fs = new();
+
+    // One options instance serves the analyzer and the cleanup, as DI does. A rooted CopilotHome keeps the
+    // simulated CLI and the cleanup independent of the host's COPILOT_HOME and profile.
+    private readonly IOptions<SessionInsightsOptions> options = Options();
+    private readonly CopilotEvolveSessionCleanup cleanup;
+
+    public SkillAnalyzerTests()
+    {
+        options.Value.CopilotHome = CopilotHome;
+        cleanup = new CopilotEvolveSessionCleanup(fs, options, NullLogger<CopilotEvolveSessionCleanup>.Instance);
+    }
+
+    private const string CopilotHome = @"C:\data\copilot-home";
+
+    private SkillAnalyzer Analyzer(IEvolveSessionCleanup? cleanupOverride = null, IOptions<SessionInsightsOptions>? optionsOverride = null) =>
+        new(locator, processes, activity, optionsOverride ?? options, cleanupOverride ?? cleanup);
+
+    private static string SessionIdOf(ProcessSpec spec) => spec.Arguments[spec.Arguments.ToList().IndexOf("--session-id") + 1];
+
+    private string SessionFolder(string id) => $@"{CopilotHome}\session-state\{id}";
+
+    private void CreateSession(string id, string? cwd = null)
+    {
+        fs.AddDirectory(SessionFolder(id));
+        fs.AddFile($@"{SessionFolder(id)}\events.jsonl", new MockFileData("{}"));
+        fs.AddFile($@"{SessionFolder(id)}\workspace.yaml", new MockFileData($"id: {id}\ncwd: '{cwd ?? SkillAnalysisActivity.WorkingDirectory}'\n"));
+    }
+
+    private static Session[] TwoRequests(SessionSource source = SessionSource.Copilot) =>
+    [
+        new Session
+        {
+            Id = "session-a",
+            Source = source,
+            SkillPrompts = [new SkillPrompt("First repeated request", Start), new SkillPrompt("Second repeated request", Start.AddMinutes(1))],
+        },
+    ];
+
+    private void CliCreatesSessionAndReturns(string stdout, string? cwd = null, int exitCode = 0) =>
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                CreateSession(SessionIdOf(call.Arg<ProcessSpec>()), cwd);
+                return Task.FromResult(new ProcessResult(exitCode, stdout, string.Empty));
+            });
 
     [Fact]
     public async Task Uses_local_cli_and_turns_repeated_requests_into_instructions_with_evidence()
@@ -51,7 +100,7 @@ public sealed class SkillAnalyzerTests
             Title = "Second session",
             SkillPrompts = [new SkillPrompt("Write release notes for the changes merged today", Start.AddDays(2))],
         };
-        var analyzer = new SkillAnalyzer(locator, processes, activity, Options());
+        var analyzer = Analyzer();
 
         var result = await analyzer.AnalyzeAsync([first, second], Start.AddDays(1), null, SessionSource.Copilot,
             TestContext.Current.CancellationToken);
@@ -69,7 +118,7 @@ public sealed class SkillAnalyzerTests
         captured.ShouldNotBeNull();
         captured.FileName.ShouldBe("/usr/bin/copilot");
         captured.WorkingDirectory.ShouldBe(SkillAnalysisActivity.WorkingDirectory);
-        captured.Arguments.ShouldBe(
+        captured.Arguments.Take(captured.Arguments.Count - 2).ShouldBe(
         [
             "--silent", "--no-custom-instructions", "--disable-builtin-mcps",
             "--disable-mcp-server", "computer-use", "--no-ask-user",
@@ -77,6 +126,8 @@ public sealed class SkillAnalyzerTests
             "--deny-tool", "shell", "--deny-tool", "write", "--deny-tool", "read",
             "--deny-tool", "url", "--deny-tool", "memory",
         ]);
+        captured.Arguments[^2].ShouldBe("--session-id");
+        SessionIdFormat.IsValid(captured.Arguments[^1]).ShouldBeTrue();
         captured.RemoveEnvironment.ShouldBe(
         [
             "COPILOT_ALLOW_ALL", "COPILOT_ASSISTED_APPROVAL", "COPILOT_PLAN_THEN_AUTOPILOT",
@@ -85,7 +136,7 @@ public sealed class SkillAnalyzerTests
             "COPILOT_OTEL_ENABLED", "COPILOT_OTEL_FILE_EXPORTER_PATH", "OTEL_EXPORTER_OTLP_ENDPOINT",
             "COPILOT_ENABLE_INTERRUPTED_SESSION_RESTORE",
         ]);
-        captured.Environment.ShouldBeNull();
+        captured.Environment.ShouldBe(new Dictionary<string, string> { ["COPILOT_HOME"] = CopilotHome });
         captured.Arguments.ShouldNotContain("-p");
         captured.Arguments.ShouldAllBe(argument => SafeArgument.IsMatch(argument));
         captured.Arguments.ShouldNotContain(argument => argument.Contains("Prepare release notes"));
@@ -104,21 +155,12 @@ public sealed class SkillAnalyzerTests
         ProcessSpec? captured = null;
         processes.RunAsync(Arg.Do<ProcessSpec>(spec => captured = spec), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty)));
-        var options = Options();
-        options.Value.CopilotHome = "C:\\copilot-home";
-        var session = new Session
-        {
-            Id = "session-a",
-            Source = SessionSource.Copilot,
-            SkillPrompts = [new SkillPrompt("First repeated request", Start), new SkillPrompt("Second repeated request", Start.AddMinutes(1))],
-        };
 
-        await new SkillAnalyzer(locator, processes, activity, options)
-            .AnalyzeAsync([session], null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+        await Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
 
         captured.ShouldNotBeNull();
         captured.Environment.ShouldNotBeNull();
-        captured.Environment.ShouldBe(new Dictionary<string, string> { ["COPILOT_HOME"] = "C:\\copilot-home" });
+        captured.Environment.ShouldBe(new Dictionary<string, string> { ["COPILOT_HOME"] = CopilotHome });
         captured.RemoveEnvironment.ShouldNotBeNull();
         captured.RemoveEnvironment.ShouldNotContain("COPILOT_HOME");
         captured.RemoveEnvironment.ShouldNotContain("COPILOT_GITHUB_TOKEN");
@@ -134,6 +176,200 @@ public sealed class SkillAnalyzerTests
         captured.RemoveEnvironment.ShouldNotContain("COPILOT_PROVIDER_API_KEY_COMMAND");
         captured.RemoveEnvironment.ShouldNotContain("COPILOT_PROVIDER_HEADERS");
         captured.RemoveEnvironment.Intersect(captured.Environment.Keys, StringComparer.OrdinalIgnoreCase).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Copilot_passes_no_environment_when_no_home_is_configured()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        ProcessSpec? captured = null;
+        processes.RunAsync(Arg.Do<ProcessSpec>(spec => captured = spec), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty)));
+        var noHome = Options();
+        var noHomeCleanup = new CopilotEvolveSessionCleanup(fs, noHome, NullLogger<CopilotEvolveSessionCleanup>.Instance);
+
+        await Analyzer(noHomeCleanup, noHome).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+
+        captured.ShouldNotBeNull();
+        captured.Environment.ShouldBeNull();
+        captured.RemoveEnvironment.ShouldNotBeNull();
+        captured.RemoveEnvironment.ShouldNotContain("COPILOT_HOME");
+    }
+
+    [Fact]
+    public async Task Removes_its_own_copilot_session_after_the_run()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        CliCreatesSessionAndReturns("""{"opportunities":[]}""");
+
+        await Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+
+        fs.Directory.GetDirectories($@"{CopilotHome}\session-state").ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Removes_its_session_when_the_cli_exits_nonzero()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        CliCreatesSessionAndReturns(string.Empty, exitCode: 1);
+
+        var failure = await Should.ThrowAsync<UnprocessableException>(() =>
+            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken));
+
+        failure.Message.ShouldBe("The copilot CLI exited with code 1.");
+        fs.Directory.GetDirectories($@"{CopilotHome}\session-state").ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Removes_its_session_when_the_output_is_invalid()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        CliCreatesSessionAndReturns("this is not json");
+
+        var failure = await Should.ThrowAsync<UnprocessableException>(() =>
+            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken));
+
+        failure.Message.ShouldBe("The selected CLI returned an invalid skill analysis. Try again.");
+        fs.Directory.GetDirectories($@"{CopilotHome}\session-state").ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Keeps_the_session_when_cancelled_or_timed_out(bool callerCancels)
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        using var caller = new CancellationTokenSource();
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>())
+            .Returns<Task<ProcessResult>>(call =>
+            {
+                CreateSession(SessionIdOf(call.Arg<ProcessSpec>()));
+                if (callerCancels)
+                {
+                    caller.Cancel();
+                }
+
+                throw new OperationCanceledException();
+            });
+
+        var analysis = Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, caller.Token);
+
+        if (callerCancels)
+        {
+            await Should.ThrowAsync<OperationCanceledException>(() => analysis);
+        }
+        else
+        {
+            var failure = await Should.ThrowAsync<UnprocessableException>(() => analysis);
+            failure.Message.ShouldBe("Skill analysis timed out after 2 minutes. Try a smaller date range.");
+        }
+
+        fs.Directory.GetDirectories($@"{CopilotHome}\session-state").Length.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Uses_a_fresh_session_id_per_run()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        var ids = new List<string>();
+        processes.RunAsync(Arg.Do<ProcessSpec>(spec => ids.Add(SessionIdOf(spec))), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty)));
+        var analyzer = Analyzer();
+
+        await analyzer.AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+        await analyzer.AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+
+        ids.Count.ShouldBe(2);
+        ids[0].ShouldNotBe(ids[1]);
+    }
+
+    [Fact]
+    public async Task Does_not_fail_the_analysis_when_cleanup_is_refused()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        string? id = null;
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                id = SessionIdOf(call.Arg<ProcessSpec>());
+                CreateSession(id, @"C:\other");
+                return Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty));
+            });
+
+        var result = await Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+
+        result.RequestsAnalyzed.ShouldBe(2);
+        id.ShouldNotBeNull();
+        fs.File.Exists($@"{SessionFolder(id)}\workspace.yaml").ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Does_not_fail_the_analysis_when_cleanup_fails()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty)));
+        var failing = Substitute.For<IEvolveSessionCleanup>();
+        failing.RemoveAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EvolveSessionCleanupOutcome.Failed));
+
+        var result = await Analyzer(failing).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+
+        result.RequestsAnalyzed.ShouldBe(2);
+        await failing.Received(1).RemoveAsync(Arg.Any<string>(), false, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Removes_the_session_inside_the_analysis_lease_after_the_cli_returned()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        var events = new List<string>();
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                events.Add("run");
+                return Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty));
+            });
+        var recording = Substitute.For<IEvolveSessionCleanup>();
+        recording.RemoveAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                events.Add($"cleanup:lease={activity.HasActiveAnalysis}");
+                return Task.FromResult(EvolveSessionCleanupOutcome.Removed);
+            });
+
+        await Analyzer(recording).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+
+        events.ShouldBe(["run", "cleanup:lease=True"]);
+        activity.HasActiveAnalysis.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Refuses_to_launch_when_the_session_id_already_exists()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        var existing = Substitute.For<IEvolveSessionCleanup>();
+        existing.Exists(Arg.Any<string>()).Returns(true);
+
+        var failure = await Should.ThrowAsync<UnprocessableException>(() =>
+            Analyzer(existing).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken));
+
+        failure.Message.ShouldBe("Could not start the analysis. Try again.");
+        await processes.DidNotReceive().RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>());
+        await existing.DidNotReceive().RemoveAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Claude_runs_never_use_the_session_cleanup()
+    {
+        locator.Locate("claude").Returns("/usr/bin/claude");
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessResult(0, """{"result":"{\"opportunities\":[]}"}""", string.Empty)));
+        var untouched = Substitute.For<IEvolveSessionCleanup>();
+
+        await Analyzer(untouched).AnalyzeAsync(TwoRequests(SessionSource.Claude), null, null, SessionSource.Claude, TestContext.Current.CancellationToken);
+
+        untouched.ReceivedCalls().ShouldBeEmpty();
     }
 
     [Fact]
@@ -185,7 +421,7 @@ public sealed class SkillAnalyzerTests
             Source = cli,
             SkillPrompts = [new SkillPrompt(request, Start), new SkillPrompt(request, Start.AddMinutes(1))],
         };
-        var analyzer = new SkillAnalyzer(locator, processes, activity, Options());
+        var analyzer = Analyzer();
 
         await analyzer.AnalyzeAsync([session], null, null, cli, TestContext.Current.CancellationToken);
     }
@@ -199,7 +435,7 @@ public sealed class SkillAnalyzerTests
             Source = SessionSource.Claude,
             SkillPrompts = [new SkillPrompt("A single repeated workflow request", null)],
         };
-        var analyzer = new SkillAnalyzer(locator, processes, activity, Options());
+        var analyzer = Analyzer();
 
         var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Claude,
             TestContext.Current.CancellationToken);
@@ -227,9 +463,8 @@ public sealed class SkillAnalyzerTests
                 new SkillPrompt("Build this project and summarize failures", Start.AddMinutes(1)),
             ],
         };
-        var options = Options();
         options.Value.ClaudeConfigDir = "/tmp/claude-config";
-        var analyzer = new SkillAnalyzer(locator, processes, activity, options);
+        var analyzer = Analyzer();
 
         var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Claude,
             TestContext.Current.CancellationToken);
@@ -247,6 +482,7 @@ public sealed class SkillAnalyzerTests
                 && spec.Environment["CLAUDE_CONFIG_DIR"] == options.Value.ClaudeConfigDir
                 && spec.Environment.Count == 1
                 && spec.RemoveEnvironment == null
+                && !spec.Arguments.Contains("--session-id")
                 && spec.StandardInput != null
                 && !spec.Arguments.Any(argument => argument.Contains("compilation errors"))),
             Arg.Any<CancellationToken>());
@@ -268,7 +504,7 @@ public sealed class SkillAnalyzerTests
                 new SkillPrompt("Rerun tests", Start.AddMinutes(1)),
             ],
         };
-        var analyzer = new SkillAnalyzer(locator, processes, activity, Options());
+        var analyzer = Analyzer();
 
         var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Copilot,
             TestContext.Current.CancellationToken);

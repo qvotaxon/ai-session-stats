@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SessionInsights.Application.Common;
 using SessionInsights.Application.Sessions;
@@ -19,7 +20,8 @@ internal sealed class SkillAnalyzer(
     IProcessRunner processes,
     ISkillAnalysisActivity activity,
     IOptions<SessionInsightsOptions> options,
-    IEvolveSessionCleanup cleanup) : ISkillAnalyzer
+    IEvolveSessionCleanup cleanup,
+    ILogger<SkillAnalyzer> logger) : ISkillAnalyzer
 {
     private const int MaxRequests = 60;
     private const int MaxPromptLength = 1000;
@@ -160,11 +162,13 @@ internal sealed class SkillAnalyzer(
 
         if (result.ExitCode != 0)
         {
+            // Codes only: stdout and stderr can hold the user's prompts and the model's reply.
+            logger.LogWarning("Skill analysis {Cli} CLI exited with code {ExitCode}", cli, result.ExitCode);
             throw new UnprocessableException($"The {cliName} CLI exited with code {result.ExitCode}.");
         }
 
         var output = cli == SessionSource.Claude ? ClaudeResult(result.StdOut) : result.StdOut;
-        var suggestions = ParseSuggestions(output);
+        var suggestions = ParseSuggestions(output, cli);
         var byId = examples.ToDictionary(example => example.Id, StringComparer.Ordinal);
         var opportunities = new List<SkillOpportunity>();
         foreach (var suggestion in suggestions.Take(8))
@@ -224,7 +228,7 @@ internal sealed class SkillAnalyzer(
             """;
     }
 
-    private static SuggestedSkill[] ParseSuggestions(string output)
+    private SuggestedSkill[] ParseSuggestions(string output, SessionSource cli)
     {
         try
         {
@@ -244,6 +248,11 @@ internal sealed class SkillAnalyzer(
         }
         catch (JsonException)
         {
+            // Lengths and codes only: the output holds the user's prompts and the model's reply.
+            logger.LogWarning(
+                "Skill analysis output from {Cli} was not a valid analysis ({OutputLength} characters)",
+                cli,
+                output.Length);
             throw new UnprocessableException("The selected CLI returned an invalid skill analysis. Try again.");
         }
     }

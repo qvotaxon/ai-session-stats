@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -42,7 +43,9 @@ public sealed class SkillAnalyzerTests
     private const string CopilotHome = @"C:\data\copilot-home";
 
     private SkillAnalyzer Analyzer(IEvolveSessionCleanup? cleanupOverride = null, IOptions<SessionInsightsOptions>? optionsOverride = null) =>
-        new(locator, processes, activity, optionsOverride ?? options, cleanupOverride ?? cleanup);
+        new(locator, processes, activity, optionsOverride ?? options, cleanupOverride ?? cleanup, analyzerLog);
+
+    private readonly ListLogger<SkillAnalyzer> analyzerLog = new();
 
     private static string SessionIdOf(ProcessSpec spec) => spec.Arguments[spec.Arguments.ToList().IndexOf("--session-id") + 1];
 
@@ -231,6 +234,48 @@ public sealed class SkillAnalyzerTests
 
         failure.Message.ShouldBe("The selected CLI returned an invalid skill analysis. Try again.");
         fs.Directory.GetDirectories($@"{CopilotHome}\session-state").ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Logs_a_diagnostic_without_the_model_output_when_the_output_cannot_be_parsed()
+    {
+        const string secret = "PROSE-FROM-THE-MODEL-42";
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        CliCreatesSessionAndReturns($"I will look at the history. {secret}");
+
+        await Should.ThrowAsync<UnprocessableException>(() =>
+            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken));
+
+        var entry = analyzerLog.Entries.ShouldHaveSingleItem();
+        entry.Level.ShouldBe(LogLevel.Warning);
+        entry.Properties["Cli"].ShouldBe(SessionSource.Copilot);
+        entry.Properties.ContainsKey("ExitCode").ShouldBeFalse();
+        entry.Properties["OutputLength"].ShouldBe($"I will look at the history. {secret}".Length);
+        analyzerLog.AllText().ShouldNotContain(text => text.Contains(secret));
+    }
+
+    [Fact]
+    public async Task Logs_the_cli_and_exit_code_without_the_process_output_when_the_cli_exits_nonzero()
+    {
+        const string stdoutSecret = "STDOUT-PROSE-FROM-THE-MODEL-7";
+        const string stderrSecret = "STDERR-DETAIL-FROM-THE-CLI-9";
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                CreateSession(SessionIdOf(call.Arg<ProcessSpec>()));
+                return Task.FromResult(new ProcessResult(1, stdoutSecret, stderrSecret));
+            });
+
+        var failure = await Should.ThrowAsync<UnprocessableException>(() =>
+            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken));
+
+        failure.Message.ShouldBe("The copilot CLI exited with code 1.");
+        var entry = analyzerLog.Entries.ShouldHaveSingleItem();
+        entry.Level.ShouldBe(LogLevel.Warning);
+        entry.Properties["Cli"].ShouldBe(SessionSource.Copilot);
+        entry.Properties["ExitCode"].ShouldBe(1);
+        analyzerLog.AllText().ShouldNotContain(text => text.Contains(stdoutSecret) || text.Contains(stderrSecret));
     }
 
     [Theory]

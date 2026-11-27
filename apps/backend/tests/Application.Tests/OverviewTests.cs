@@ -32,6 +32,26 @@ public sealed class OverviewTests
     }
 
     [Fact]
+    public void Copilot_home_is_the_configured_home()
+    {
+        var options = new SessionInsightsOptions { CopilotHome = Path.Combine(Path.GetTempPath(), "custom-copilot") };
+
+        options.ResolveCopilotHome().ShouldBe(options.CopilotHome);
+    }
+
+    [Fact]
+    public void Copilot_home_ignores_an_explicit_transcript_root()
+    {
+        var options = new SessionInsightsOptions
+        {
+            CopilotHome = Path.Combine(Path.GetTempPath(), "custom-copilot"),
+            CopilotRoot = Path.Combine(Path.GetTempPath(), "explicit-copilot"),
+        };
+
+        options.ResolveCopilotHome().ShouldBe(options.CopilotHome);
+    }
+
+    [Fact]
     public async Task Overview_aggregates_all_sessions_keeps_versions_and_providers_separate_and_counts_unknowns()
     {
         var index = Substitute.For<ISessionIndex>();

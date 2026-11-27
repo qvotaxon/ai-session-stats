@@ -1,0 +1,33 @@
+name: ADR headings
+
+# The job id "adr-headings" is a required status check on main; the owner sets it in the ruleset.
+# Do not rename the job, give it a name:, add an if: condition, or filter the pull_request trigger
+# by paths or branches. A required check that does not run stays pending and blocks the merge.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adr-headings-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  adr-headings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Test the ADR heading check
+        run: node --test scripts/tests/check-adr-headings.test.mjs
+      - name: Check ADR headings
+        run: node scripts/check-adr-headings.mjs docs/adr

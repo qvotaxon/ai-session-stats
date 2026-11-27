@@ -45,6 +45,37 @@ Options considered:
 - **Delete the `session-store.db` row too, or drive the picker's `x` key.** Rejected: the first is a Copilot-owned, undocumented SQLite schema
   with corruption risk, and the second is interactive only.
 
+Evidence (experiments of 2026-11-27, run against the real Copilot CLI; the session counts and ids stay out of this record):
+
+- **Z1, argument loss.** Through the npm `copilot.cmd` shim, today's launch (`-p` plus a multi-line prompt) sent 9 arguments and the CLI received 2:
+  everything after the first newline was lost. The target launch (instruction and data on stdin, constant arguments) sent 21 arguments and
+  received 21, identical, with the stdin bytes matching by hash.
+- **Z2, flags.** All the new flags parse. `--deny-tool "*"` is rejected ("Invalid rule format"), `--deny-url "*"` is accepted, so the lockdown
+  uses named deny rules instead.
+- **M1 and M3, lockdown.** Stdin input without `-p` works. The tool baseline lists only `view`. In M3 the model attempted three `view` calls on
+  planted canary files and all three were denied: the read deny rule was proven on a file inside the working folder, and files outside it were
+  stopped by the path restriction plus the unattended fallback (no interactive user to approve). No canary content leaked.
+- **Z3, cleanup against the real layout.** The product cleanup, run through the real CLI's folder layout in a throwaway home, removed the session
+  (`Removed` logged, only the CLI's own lock folder left).
+- **J1, links.** A session folder that is itself a junction is refused (`ReparsePoint`) and the target stays intact. When the junction is
+  inside the session folder, `Directory.Delete(recursive)` throws `UnauthorizedAccessException` on this OS (reproduced in plain PowerShell
+  without the product). The product logs `Failed (UnauthorizedAccessException)`, the junction is not followed and the target is intact, the
+  session's own files (`workspace.yaml`, `events.jsonl`) are deleted, and an empty folder is left. This is accepted: it fails closed.
+- **M2, end to end.** The product ran against the real Copilot home: the analysis returned its result, `Removed` was logged, the session folder
+  was absent afterwards, the number of session folders was equal before and after, a recheck 30 seconds later still found it absent, and
+  Evolve's working folder stayed empty.
+- **P1, picker check (by the owner).** An older session from before the fix, used as a control, was listed in Copilot's own resume picker. No
+  session from the M2 run was listed. The limit: only the visible rows (in descending last-updated order) were checked, and the picker may list
+  more.
+
+Not verified:
+
+- That `--available-tools` hides the tools of a connected MCP server. The servers that did start all failed sign-in, so none connected.
+- The `@` attachment. It is escaped in the prompt and unit-tested, but not observable end to end, because the cleanup deletes `events.jsonl`. The
+  canary's access time is confounded by the experiment's own read, and the process log showed nothing.
+- The usage figures of the M2 run.
+- Whether the CLI's workspace discovery walks up through ancestor folders of the working folder.
+
 ## Solution (Decision)
 
 What we will do. After the CLI process of a Copilot analysis returned normally, the backend deletes one folder:
@@ -85,11 +116,16 @@ Negative:
 
 - The product now contains code that deletes in the user's profile. A bug there is not recoverable by a revert, so the code is reviewed as
   security-relevant and rule changes need a new decision.
-- Residue remains that the product cannot remove: Copilot's `session-store.db` rows (so the session may still be listed in the picker, which
-  is not verified), `config.json` changes, `process-*.log` files, and the full session of a cancelled or timed-out analysis, the most likely
+- Residue remains that the product cannot remove: Copilot's `session-store.db` rows (the session was not listed in the picker in the P1 check,
+  within the limits stated under Evidence), `config.json` changes, `process-*.log` files, and the full session of a cancelled or timed-out analysis, the most likely
   failure path being the 2-minute timeout.
 - Copies made by user code remain. The user's own hooks run in the child and receive the prompt and a `transcriptPath`, so a hook can copy the
   transcript. If `--sync-session=off` is rejected by an older CLI and dropped, a synced copy may also remain.
+- Accepted residual (J1b): when a session folder contains an inner junction, the recursive delete throws `UnauthorizedAccessException`. The
+  product logs a warning and leaves an empty folder; the junction is not followed and its target is intact. It fails closed.
+- Also remaining, from the Evidence section: MCP servers and plugin hooks of the user's own configuration still start (a user hook receives the
+  session digest and a transcript path); the working folder can be trusted by the CLI on a machine whose profile folder is trusted (it is empty
+  by construction and stayed empty in the runs); the bring-your-own-key variables are kept on purpose; the items under "Not verified".
 - A same-user process can swap a link in between the check and the delete. That is outside the model: such a process can already delete the
   data itself.
 - A backend that resolves a different home than the child (an unusual `HOME` or `USERPROFILE`) deletes nothing and logs a warning, so the

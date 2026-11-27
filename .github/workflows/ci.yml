@@ -46,6 +46,8 @@ jobs:
         run: pnpm --dir apps/frontend install --frozen-lockfile
       - name: Lint
         run: pnpm --dir apps/frontend run lint
+      - name: Format check
+        run: pnpm --dir apps/frontend run format:check
       - name: Test
         run: pnpm --dir apps/frontend run test
       - name: Build

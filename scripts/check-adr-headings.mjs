@@ -18,7 +18,7 @@ const AMENDMENT = /^## Amendment \d{4}-\d{2}-\d{2}: \S.* \(#\d+\)$/;
 const STATUS = /^(Proposed|Accepted|Deprecated|Superseded by ADR-\d{4})\b/;
 
 function headingLines(text) {
-  const lines = text.replace(/^﻿/, '').replace(/\r/g, '').split('\n');
+  const lines = text.replace(/^\uFEFF/, '').replace(/\r/g, '').split('\n');
   let inFence = false;
   return lines.map((raw, index) => {
     if (raw.startsWith('```') || raw.startsWith('~~~')) {

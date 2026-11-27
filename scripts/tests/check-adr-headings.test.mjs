@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { checkAdrDirectory } from '../check-adr-headings.mjs';
 
-const DASH = '–';
+const DASH = '\u2013';
 
 function conforming(number = '0004', { h1, status = 'Accepted (2026-01-10)', extra = '' } = {}) {
   return [
@@ -104,7 +106,7 @@ test('CRLF input passes', () => {
 });
 
 test('a file starting with a BOM passes', () => {
-  passes(FILE, `﻿${conforming()}`);
+  passes(FILE, `\uFEFF${conforming()}`);
 });
 
 test('trailing whitespace on headings passes', () => {
@@ -220,4 +222,32 @@ test('a file with no H1 fails', () => {
 test('an empty directory is fine and an unknown directory is an error', () => {
   assert.deepEqual(check({}), []);
   assert.ok(checkAdrDirectory(path.join(os.tmpdir(), 'adr-does-not-exist-102')).errors.length > 0);
+});
+
+const CHECKER = fileURLToPath(new URL('../check-adr-headings.mjs', import.meta.url));
+
+function runCli(files) {
+  const dir = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'adr-cli-'));
+  try {
+    for (const [name, content] of Object.entries(files)) {
+      fs.writeFileSync(path.join(dir, name), content);
+    }
+    return spawnSync(process.execPath, [CHECKER, dir], { encoding: 'utf8' });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test('the CLI exits 1 and prints the error to stderr for a failing directory', () => {
+  const result = runCli({ [FILE]: conforming('0004', { h1: '# ADR-0004: x' }) });
+  assert.equal(result.status, 1, `stdout: ${result.stdout} stderr: ${result.stderr}`);
+  assert.match(result.stderr, /0004-x\.md: H1 must be "# ADR-NNNN . <title>"/);
+  assert.equal(result.stdout, '');
+});
+
+test('the CLI exits 0 and reports the count for a conforming directory', () => {
+  const result = runCli({ [FILE]: conforming() });
+  assert.equal(result.status, 0, `stdout: ${result.stdout} stderr: ${result.stderr}`);
+  assert.equal(result.stdout.trim(), '1 ADRs checked, all conform');
+  assert.equal(result.stderr, '');
 });

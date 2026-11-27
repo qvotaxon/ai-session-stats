@@ -1,9 +1,16 @@
-# ADR-0008: Local persisted snapshot store for usage trends
+# ADR-0008 – Local persisted snapshot store for usage trends
 
-- Status: Proposed
-- Date: 2026-11-25
+## Status
 
-## Context
+Proposed (2026-11-25)
+
+## Prologue (Summary)
+
+In the context of usage trends that must outlive CLI transcript retention (#66), facing crash safety for a Scheduled Task that can be killed mid-write, the size after a year, the small grouped queries of #70, #72 and #77, uninstall behaviour and owner approval for new packages, we decided for contribution JSON-lines files, one per month, under `snapshots/YYYY-MM.jsonl` with atomic temp-and-replace writes, to achieve a store that needs no new package, stays human-readable and confines a corruption to one month, accepting more rows than daily rollups, a store that grows until the user clears it, and no history older than the CLIs' own retention.
+
+_Prologue added when this record was converted to the Alexandrian template (#102). It restates the record below and changes no decision._
+
+## Discussion (Context)
 
 Trends need data that outlives CLI transcript retention (#66). Claude Code deletes old
 transcripts after `cleanupPeriodDays` and Copilot CLI session state is likewise transient, so a
@@ -37,9 +44,9 @@ logoff, update, or `Quit Session Insights`), size after one year, the query need
 uninstall behaviour (the uninstaller deletes the whole data root, per `README.md:62`), and package
 approval (new NuGet dependencies require owner approval).
 
-## Options
+### Options
 
-### 1. Contribution JSON-lines files, one file per month
+#### 1. Contribution JSON-lines files, one file per month
 
 `snapshots/YYYY-MM.jsonl`, one JSON object per metric contribution, keyed by stable source,
 session and contribution identity. Daily aggregates are derived at read time. A month is updated by
@@ -59,7 +66,7 @@ reading its file, reconciling contributions as described below, and writing it o
 - Package: none. Uses `System.Text.Json` and `IFileSystem`, matching the existing stores' JSON
   and file-system abstraction (not their in-place write).
 
-### 2. SQLite through `Microsoft.Data.Sqlite`
+#### 2. SQLite through `Microsoft.Data.Sqlite`
 
 A single `snapshots.db` with one table keyed by the tuple above.
 
@@ -73,7 +80,7 @@ A single `snapshots.db` with one table keyed by the tuple above.
 - Package: adds `Microsoft.Data.Sqlite` (and its native asset), which needs owner approval and
   enlarges the self-contained `win-x64` publish. Disproportionate to the query needs.
 
-### 3. One JSON file rewritten on every change
+#### 3. One JSON file rewritten on every change
 
 `snapshots.json` holding the full array, rewritten whenever a day changes.
 
@@ -85,7 +92,7 @@ A single `snapshots.db` with one table keyed by the tuple above.
 - Backup/uninstall: one text file; same as option 1 but coarser.
 - Package: none.
 
-## Decision
+## Solution (Decision)
 
 Adopt **option 1: contribution JSON-lines files, one file per month**, under
 `snapshots/YYYY-MM.jsonl` in the data root resolved by `SessionInsightsOptions.ResolveDataRoot()`.
@@ -215,7 +222,7 @@ reconciliation rules as subsequent indexing, so a crash can be safely re-run wit
 Only successfully identified and persisted contributions survive deletion of the underlying
 transcripts.
 
-## Consequences
+## Consequences (Results)
 
 - No new package and no owner approval needed; the store reuses the existing JSON + `IFileSystem`
   approach. The atomic temp-and-replace write is new code here, not a reused pattern.

@@ -1,14 +1,20 @@
-# ADR 0004: Per-user Windows installer that keeps zip-based self-update
+# ADR-0004 – Per-user Windows installer that keeps zip-based self-update
 
 ## Status
 
 Accepted
 
-## Context
+## Prologue (Summary)
+
+In the context of installing a release, which meant extracting the zip, copying `app\` and running two PowerShell scripts with the right flags, facing the need for a normal setup wizard while the tray updater (the tray self-update ADR) keeps working, so the installed layout cannot change, we decided for a per-user, no-admin `SessionInsights-Setup.exe`, built with a pinned Inno Setup, that installs into the fixed `%LOCALAPPDATA%\SessionInsights\app` folder while the updater keeps using only the zip, to achieve a setup wizard for colleagues without changing self-update, accepting that uninstalling deletes the user's reports and settings and that the unsigned installer makes Windows SmartScreen warn on first run.
+
+_Prologue added when this record was converted to the Alexandrian template (#102). It restates the record below and changes no decision._
+
+## Discussion (Context)
 
 Installing a release meant extracting the zip, copying `app\` to `%LOCALAPPDATA%\SessionInsights\app`, and running two PowerShell scripts with the right flags. Colleagues should get a normal setup wizard. The tray updater (ADR 0003) must keep working, so the installed layout cannot change.
 
-## Decision
+## Solution (Decision)
 
 Each release also ships `SessionInsights-Setup.exe` (plus `.sha256`), built with a version- and checksum-pinned Inno Setup in a read-only Windows job from the workflow's archive artifact. A separate publishing job, gated by owner approval in the `release` environment, uploads all four assets before publishing. Build jobs do not receive release-write credentials.
 
@@ -18,7 +24,7 @@ Each release also ships `SessionInsights-Setup.exe` (plus `.sha256`), built with
 - The updater still downloads and verifies the zip only. It never runs the installer.
 - The installer is unsigned for now, so Windows SmartScreen warns on first run.
 
-## Consequences
+## Consequences (Results)
 
 - Uninstalling deletes the user's reports and settings. Reinstalling starts clean.
 - Reinstalling an older Setup over a newer self-updated app downgrades it until the next update check.

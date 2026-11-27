@@ -1,7 +1,7 @@
 # Investigation: isolating Copilot report runs from the user's real session
 
 Status: Proposed
-Recommended option: (b) no resume, with a digest of the session inside the `-p` argument and a dedicated report working directory. It is conditional on a length test (see "Recommendation").
+Recommended option: (b) no resume, a digest of the session sent to a fresh Copilot run in a dedicated report working directory. Conditional: session text must not pass through `cmd.exe`, and #57's design needs a security review first (see section 6).
 Accepted option:
 
 Issue: [#53](https://github.com/qvotaxon/ai-session-stats/issues/53). Unblocks #57. Overlaps with #52 (Claude), which is parked and not touched here.
@@ -20,24 +20,32 @@ Findings that decide the options:
 1. The CLI has no fork, copy or no-persist flag for `--resume` (Q1). Option (a) does not exist.
 2. Every run without `--resume` creates a new session in the Copilot home. It is visible in Copilot's own resume list (owner check, Q5).
    Isolation (b) therefore moves the pollution from the user's real session to a throwaway session. It does not remove it.
-3. `-p` ignores piped stdin (one run). A transcript has to be inside the `-p` argument. A newline in that argument is
-   truncated by the `copilot.cmd` shim, so the digest has to be a single line.
-4. An empty temp `COPILOT_HOME` is not authenticated, so option (c) cannot run without copying auth material out of the real home (Q3).
-5. `--deny-tool '*'` is rejected by this CLI. Evolve's current flags probably fail (observation, section 7).
+3. Stdin together with `-p` was ignored in one run (run 7). Stdin as the only prompt source (no `-p`) was **not tested**.
+   Putting the digest in the `-p` argument worked on a single-line toy (run 10), but that path has a command-injection risk through the `copilot.cmd` shim that the backend uses (Q2 and section 6), and a multi-line value lost every later argument in run 9 (mechanism not determined).
+4. Option (c) is **inferred** infeasible without copying auth material: one failed run under an empty temp `COPILOT_HOME` plus one log line, not confirmed by a run with the working model (Q3).
+5. `--deny-tool '*'` was rejected in one run on 1.0.114 (not re-run on 1.0.116). Evolve's current flags may therefore fail (observation, section 8).
 
-**Recommended option: (b)**, cost M (a digest builder plus a report working directory), about 1 premium request per report,
-the same as today. The condition: #57 must first test that a realistic digest fits through the `-p` argument and the `.cmd`
-shim. If it does not fit, the fallback is (d), disable Copilot reports, which is the only option with no history effect.
+**Recommended option: (b)**, cost M (a digest builder plus a report working directory), about 1 premium request per report
+on the toy session, **conditional on all of these**:
+
+- Session text (user prompts, the compaction recap) must **not** be passed as an argument through `cmd.exe`. The backend resolves `copilot` to `copilot.cmd` and `cmd.exe` re-parses its arguments (the BatBadBut class). Either start the node loader or the native binary directly, or send the prompt on stdin without `-p`. Neither was tested here.
+- #57 tests "stdin as the only prompt source" first (documented, not proven), because it avoids the length limit, the newline truncation and the injection risk, and reuses `ProcessSpec`'s input.
+- #57's design gets a security review (a threat model of the argv path) before implementation.
+- Quality: a digest without assistant actions or outcomes cannot describe what was done in a real session. Real-session quality was not measured.
+
+If these cannot be met, the fallback is (d), disable Copilot reports, which is the only option with no history effect.
 The owner picks. `Accepted option` is left empty on purpose.
 
 ## 2. Environment and version pin
 
 - Copilot CLI: `1.0.114` at the start (`copilot --version` printed `GitHub Copilot CLI 1.0.114.`). It auto-updated to `1.0.116` during the window. `copilot --version` after the experiment printed `GitHub Copilot CLI 1.0.116.`
   The per-run process logs show `1.0.114` for the log of run 3 and `1.0.116` for the logs of runs 4 to 10 (inferred from the log version strings). Runs 1 to 3 used 1.0.114.
-  The help text was read at 1.0.114 and re-checked at 1.0.116 for fork and persistence flags: none in either.
-- Model pinned on every model run: `claude-sonnet-5.5` (see "Evidence": the model the user's own sessions use most; Sonnet-class mid-tier).
+  The help text was read at 1.0.114. A re-check at 1.0.116 for fork and persistence flags was done during the session, but its output was not saved: **not re-verified** as evidence.
+- Model pinned on runs 4 to 8 and 10: `claude-sonnet-5.5` (the model the user's own sessions use most; Sonnet-class mid-tier). Run 9 lost its `--model` argument and ran on the default model (which reported itself as Sonnet 5.5). Runs 1 to 3 asked for `claude-sonnet-4.6`.
   `claude-sonnet-4.6` is in the CLI's configuration list but was reported "not available" for this account.
-- OS: Windows 11. `copilot` resolves to the npm shim `copilot.cmd`.
+- OS: Windows 11. In PowerShell `Get-Command copilot -All` lists `copilot.ps1` (ExternalScript), then `copilot.cmd`, then an extensionless `copilot`, all in the npm directory. The experiment helper started the first *Application* result, which is `copilot.cmd`, through `ProcessStartInfo` (from the helper script; the resolved file was not logged per run). The backend's `ExecutableLocator` also picks `copilot.cmd`
+  ([ExecutableLocator.cs L11](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Reports/ExecutableLocator.cs#L11)).
+  The npm `copilot.cmd` ends in `node ... npm-loader.js %*`, so `cmd.exe` re-parses the arguments.
 - Code cited at origin/main `c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2`.
 - Spend: 10 counted runs of a cap of 14. Runs 1, 2, 3 and 8 failed before a model call. A model run cost `totalPremiumRequestCost: 1`, about 36k input and 350 to 420 output tokens, and about 5 AI credits.
 - #57 must re-run `copilot --help` before implementing: everything here is tied to these versions.
@@ -46,7 +54,7 @@ Owner observations are marked "(owner check)": they come from the owner's own lo
 
 ## 3. Method and safety
 
-- Every call was PowerShell with an argument array, an explicit per-call `COPILOT_HOME` (or none), empty stdin unless piping, a 5-minute timeout, and a pinned model.
+- Every call was PowerShell with an argument array, an explicit per-call `COPILOT_HOME` (or none), empty stdin unless piping, a 5-minute timeout, and a pinned model on the model runs (except run 9).
 - Only recorded throwaway session ids were resumed, and the `workspace.yaml` cwd was asserted to be the scratch directory before each resume. No `--continue`, bare `--resume` or picker was used by an agent.
 - No login was completed and no credential file was copied or read. Process checks showed no Copilot client or backend running before the snapshot and before every model run.
 - A snapshot of the whole effective home (names, sizes, times, SHA256 under `session-state`) was taken before, mid-way, before the owner's check, and after.
@@ -79,14 +87,16 @@ Answer: stdin does not work, but the summary inside the `-p` argument does.
 
 ```powershell
 # run 7, scratch cwd "cwd-b", no resume, transcript piped on stdin
-& copilot @('-p','Give me a session report in markdown format','--silent','--no-custom-instructions','--disable-builtin-mcps',
+# helper script, via ProcessStartInfo with an argument list: @('-p','Give me a session report in markdown format','--silent','--no-custom-instructions','--disable-builtin-mcps',
   '--deny-tool','shell','--deny-tool','write','--deny-tool','memory','--model','claude-sonnet-5.5','--session-id',$id)  # stdin = transcript file
 # run 10, scratch cwd "cwd-e", summary inside the argument (single line)
 $prompt='Give me a session report in markdown format. Transcript of the session to report on: USER: list three prime numbers | ASSISTANT: Three primes: 2, 3, 5.'
-& copilot @('-p',$prompt,'--silent', ... same flags ..., '--session-id',$id,'--usage-output-file',$file)
+# helper script, via ProcessStartInfo with an argument list: @('-p',$prompt,'--silent', ... same flags ..., '--session-id',$id,'--usage-output-file',$file)
 ```
 
-- **Stdin (run 7):** the report had no trace of the transcript, and the new session's first `user.message` was exactly the prompt. `-p` ignored the piped input in this version (one run).
+- **Stdin together with `-p` (run 7, one run):** the report had no trace of the transcript, and the new session's first `user.message` was exactly the prompt. So `-p` ignored piped input when both were given.
+  **Not tested: stdin as the only prompt source (no `-p`).** The CLI reference documents piped standard input as a prompt source (for example in the `--fleet` and `--trust-folder` options), and another line says workflows do not use it as a prompt, so this is documented, not shown to work.
+  Sending the prompt and digest on stdin without `-p` would avoid the argv length limit, the newline truncation and the injection risk below, and it reuses `ProcessSpec`'s input ([SkillAnalyzer.cs L82](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/SkillAnalyzer.cs#L82)). It is the first thing #57 must test.
 - **Argument (run 10):** the report used the transcript. The first `user.message` was the prompt plus the digest (151 characters, not an exact match of the prompt).
 - **New session on disk:** yes, in both cases. The folder is `session-state/<id>` in the Copilot home, `workspace.yaml` carries the cwd of the report run, and its name is the prompt (plus the digest in run 10).
 - **Exclusion in this app:**
@@ -95,29 +105,45 @@ $prompt='Give me a session report in markdown format. Transcript of the session 
   - With the digest in the argument it does not match any more. The in-app exclusion would have to be a dedicated report working directory, the same pattern as
     [`IsSkillAnalysisSession`](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/SessionIndex.cs#L125) and Evolve's working directory
     ([SkillAnalyzer.cs L82-L83](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/SkillAnalyzer.cs#L82-L83)), or deletion of the session.
-- **The `.cmd` shim truncates multi-line arguments (run 9):** a multi-line `-p` value dropped every argument after the first newline (`--silent`, `--model`, `--session-id`, `--usage-output-file`). The run printed stats and created a session with a random id on the default model. The digest must be one line.
-  cmd.exe batch files also have a line-length limit (about 8,191 characters). **I did not test the limit**, so it is an expected constraint, not a measurement. Windows' own limit is about 32,767 characters. Real sessions are far larger than a 276-character toy, so the digest has to be a compressed one: user prompts, the compaction recap and the metrics.
-- **Quality (indicative only, a trivial session):** the run 10 report was comparable to the baseline report. The claim is weak because the session was two turns long (assumption A6).
+- **Security risk of the argument path (from code, not from a run):** option (b) puts session-derived text (user prompts, the compaction recap) into `-p`. The backend's `ExecutableLocator` tries `.exe`, `.com`, `.cmd`, `.bat` and picks the npm `copilot.cmd`
+  ([ExecutableLocator.cs L11](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Reports/ExecutableLocator.cs#L11)).
+  `ProcessRunner` passes an `ArgumentList` ([ProcessRunner.cs L29-L32](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Reports/ProcessRunner.cs#L29-L32)), but a `.cmd` runs under `cmd.exe`, which parses the command line again through `%*`.
+  That is the BatBadBut class: `& | ^ < > "` and `%VAR%` in a prompt can run commands as the user, and `%VAR%` expands environment variables of the backend into the prompt.
+  The prompt text also persists as the new session's name in Copilot's own list (run 10's session was named after its prompt). User prompts routinely contain these characters. I did not exploit or test any of this.
+  The #52 plan records the same mechanism (threat T3) and the invariant "no variable argument through the shim". Option (b) via `-p` breaks that invariant, so it needs the conditions in section 6.
+  I did **not** test any mitigation (starting node and the loader directly, the native binary, or stdin), so none is claimed.
+- **Multi-line `-p` lost later arguments (run 9, mechanism not determined):** a multi-line `-p` value dropped every argument after the first newline (`--silent`, `--model`, `--session-id`, `--usage-output-file`). The run printed stats and created a session with a random id on the default model.
+  What is known: the experiment helper started `copilot.cmd` through `ProcessStartInfo` (see section 2), and `cmd.exe` ends a batch command line at a newline. What is **not** known: where the truncation happened, because I did not isolate it (for example by running the node loader directly). I also did not run it through the backend's own `ExecutableLocator` and `ProcessRunner`. A one-line digest worked in run 10.
+  #57 must test multi-line and long prompts through the backend's real path (`ExecutableLocator` plus `ProcessRunner`), not through PowerShell.
+  The `cmd.exe` batch line limit (about 8,191 characters) was also **not tested**. It is an expected constraint, not a measurement.
+- **Quality (indicative only, a trivial two-turn session):** the run 10 report was comparable to the baseline report.
+  **Structural loss, not measured:** a resumed report sees the whole conversation (assistant turns, tool calls and results, edits, errors). The proposed digest (user prompts, the compaction recap and the metrics) carries no assistant actions, tool results or outcomes, so a report on a real session built from it cannot say what was done. Real-session quality was not measured.
 - **Tokens and cost:** run 10: `totalPremiumRequestCost: 1`, about 36k input and 347 output tokens. Baseline: 1 premium request, about 36k input and 394 output tokens. Most of the input is the user's plugin context, which loads even with `--no-custom-instructions`.
+  On a large real session the baseline's input would include the resumed context, so (b) is probably cheaper per report. This is an estimate: only the two-turn toy was measured.
 - **`--attachment`:** rejected a `.txt` file ("must be an image or native document") and still left an empty session folder behind.
 - **Code cost in #57:** the issue says the summary is "built by `CopilotSessionReader`". The reader has no such builder: it emits metrics, `SkillPrompts` and a compaction recap
   ([CopilotSessionReader.cs L120-L141](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/CopilotSessionReader.cs#L120-L141)).
-  The digest builder is new code (size M: building, escaping to one line, a length budget, tests). The process wiring is not new: `ProcessSpec` already takes an input and a working directory.
-  It would not use the input, since stdin is ignored. The report working directory and its cleanup are new as well.
+  The digest builder is new code (size M: building, a length budget, tests, plus escaping if it goes through an argument). The process wiring is not new: `ProcessSpec` already takes an input and a working directory.
+  If stdin without `-p` works, it would use that input. The report working directory and its cleanup are new as well. #57's design needs a security review (see section 6).
 
 ### Q3. Option (c): temp `COPILOT_HOME`
 
-Answer: infeasible without copying auth material from the real home. Feasible only with that copy.
+Answer: **INFERRED, not confirmed**: infeasible without copying auth material from the real home.
+
+What was observed: one run under an empty temp home (run 2) failed with `Model "claude-sonnet-4.6" is not available`, and its process log had the line `no authenticated GitHub host available`. The process log is in the real Copilot home and is not part of this document's evidence.
+What was not observed: any run under an empty home with the model that works (`claude-sonnet-5.5`), so the authentication failure was never seen as the cause of a failed model call. The same model id was also "not available" in the authenticated real home (run 3), so "model not available" alone does not show an auth failure.
+What one confirming run needs: the working model under an empty temp home, with the owner's go (it may start a login prompt, which must be aborted). That is an open item for the owner, not a finding. Because this verdict is what rules out (c), the only producing option that leaves nothing in Copilot's list, (c) is not dismissed on this evidence alone.
 
 ```powershell
-# run 2: empty temp home, new session id, pinned model
-$env:COPILOT_HOME = '<scratch>\home-empty'   # set for that one child process only
+# run 2: empty temp home, new session id (the variable is scoped to the child process by the helper; in a plain
+# PowerShell session `$env:COPILOT_HOME = ...` would instead stay set for the whole session)
+$env:COPILOT_HOME = '<scratch>\home-empty'
 copilot -p 'list three prime numbers' -s --no-custom-instructions --disable-builtin-mcps --deny-tool shell --deny-tool write --deny-tool memory --model claude-sonnet-4.6 --session-id <id>
 ```
 
 - Output: `Execution failed: Model "claude-sonnet-4.6" is not available.`
-- The process log of that run says `server policy fetch skipped: no authenticated GitHub host available`. The same model id was also "not available" in the real home, which was authenticated (`latest_model_list_fetch_succeeded: true` in its log), so the model name was a separate problem. The empty home's lack of authentication is a distinct finding.
-- Step 3's isolation test: `COPILOT_HOME` does isolate session state. A session folder was created under the temp home and nothing in the real `session-state` changed. Auth does not carry over: the empty home has none.
+- The process log of that run says `server policy fetch skipped: no authenticated GitHub host available`. That wording is from a managed-settings component, so it is a hint about authentication, not proof. The real home's log reported `latest_model_list_fetch_succeeded: true`.
+- Step 3's isolation test (observed): `COPILOT_HOME` does isolate session state. A session folder was created under the temp home and nothing in the real `session-state` changed.
 - No token environment variables were set in the shell (names checked, values never read), so the real home's auth is a stored login, not an env token. Which stored file or credential-store entry the CLI needs was **not determined**.
   A candidate from the docs is the plain-text credential fallback under the home. I did not copy or read any, because the last-resort credential copy was not needed to answer Q3.
 - **Security cost of (c):** copying auth material into a temp folder (and deleting it on every exit path). A login under a temp home creates a new OAuth grant, so it is not an alternative.
@@ -126,7 +152,7 @@ copilot -p 'list three prime numbers' -s --no-custom-instructions --disable-buil
   with the run started at [L220](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Reports/ReportCoordinator.cs#L220) and the env built at
   [L294-L300](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Reports/ReportCoordinator.cs#L294-L300).
   The copy source is the configured `SessionInsightsOptions.CopilotHome` (service-account case). A copy of a live session can catch a half-written last line of `events.jsonl` (noted, not tested). The largest `events.jsonl` in the real home was about 59 MB, so copy time and disk are a real cost.
-- Not run: step 6 (resume under a temp home with a copied session). It could not start without auth.
+- Not run: step 6 (resume under a temp home with a copied session), because the inferred missing auth made it unrunnable without a credential copy. No other run under a temp home was made, although 4 counted runs were left under the cap.
 
 ### Q4. Option (d): disable Copilot reports
 
@@ -153,9 +179,10 @@ See the table in section 5. Evidence for each cell is in the appendix. Owner che
 |---|---|---|---|---|---|---|---|
 | Baseline (today): resume in place | The report prompt and answer appended to the real session's `events.jsonl` (measured: 20 to 32 events after the report run) | Yes, the report is in context (probe answered that it was the last thing produced) | The real session itself, with the report in it | Hidden by ADR-0002 layer 5 | 1 | none | None: an appended turn cannot be undone |
 | (a) fork/copy/no-persist flag | n/a: no such flag in 1.0.114 or 1.0.116 | n/a | n/a | n/a | n/a | n/a | n/a |
-| (b) no resume, digest in `-p`, dedicated cwd | A new throwaway session per report. The real session is untouched | No (the report is in the other session) | Yes: the new sessions are listed (owner check: sessions from no-resume runs appear, named from the prompt) | Excluded by cwd, not by the exact-prompt rule | 1 | M | Delete the throwaway session folder by id (reported, not auto-reverted: index rows and config stay) |
-| (b) with stdin summary | As (b) | As (b) | As (b) | Excluded by the exact-prompt rule (first message equals the prompt) | 1 but the model never sees the digest | n/a: does not work | n/a |
-| (c) copy to temp `COPILOT_HOME` | A session in the temp home, deleted after. Needs copied auth | No | No, if the home is deleted | not applicable | 1 | L | Delete the temp home. Credential copy must be cleaned on every exit path |
+| (b) no resume, digest in `-p`, dedicated cwd | A new throwaway session per report. The real session is untouched | No (the report is in the other session) | Yes: the new sessions are listed (owner check: sessions from no-resume runs appear, named from the prompt) | Excluded by cwd, not by the exact-prompt rule | 1 on the toy session. Probably less on a real session (estimate, not measured) | M, plus a security review (injection through `cmd.exe`, section 6) | Delete the throwaway session folder by id (the real-home index rows and config stay, as the cleanup of this investigation showed) |
+| (b) with stdin and `-p` together | As (b) | As (b) | As (b) | Excluded by the exact-prompt rule (first message equals the prompt) | 1, but the model did not see the digest (one run) | n/a: not usable as tested | n/a |
+| (b) with stdin only (no `-p`) | Not tested | Not tested | Not tested | Not tested | Not tested | Probably M, smaller than the argument path | Not tested. First thing #57 tests |
+| (c) copy to temp `COPILOT_HOME` | A session in the temp home, deleted after. Probably needs copied auth (inferred, Q3) | No | No, if the home is deleted | not applicable | 1 | L | Delete the temp home. Credential copy must be cleaned on every exit path |
 | (d) disable Copilot reports | Nothing | Nothing | Nothing | The button is disabled or refused | 0 | S | Reversible |
 | Considered and rejected: resume in place, then truncate `events.jsonl` back | Appended turn removed, with a race against the user's live session | Unknown | Same as baseline | Same as baseline | 1 | M | Edits a file Copilot owns while it may be open. Rejected (do not re-propose) |
 
@@ -167,12 +194,26 @@ Owner checks (the owner opened Copilot's own resume picker in the real home; no 
 
 ## 6. Recommendation
 
-**Recommended: (b), cost M, 1 premium request per report, conditional on a length test.**
+**Recommended: (b), cost M, about 1 premium request per report on the toy session. Conditional, see below.**
 
-- It is the only option that stops the report landing in the user's real session and still produces a report. (a) does not exist, (c) needs credential copying, and (d) removes the feature.
+- It is the only option tested to stop the report landing in the user's real session while still producing a report. (a) does not exist, (c) is inferred to need credential copying (not confirmed, Q3), and (d) removes the feature.
 - It reuses patterns already in the code: a dedicated working directory excluded from the index, as Evolve does.
-- It costs a one-line digest builder and leaves a throwaway session per report in Copilot's own list, which the owner has seen is visible. Deleting those by id is safe, and it is #57's decision whether to do so.
-- Before implementing, #57 should test, on a realistic large session, that a digest fits through `-p` and the `.cmd` shim. If it cannot, the fallback is (d).
+- It costs a digest builder, a loss of report quality on real sessions (the digest has no assistant actions or outcomes, not measured), and it leaves a throwaway session per report in Copilot's own list, which the owner has seen is visible. Deleting those by id worked in this investigation, but the index rows and config stay, and no picker check was made after deleting. Whether #57 deletes them is its own decision.
+
+**Conditions (all required):**
+
+1. **Session text must not pass through `cmd.exe`.** The backend resolves `copilot` to `copilot.cmd` ([ExecutableLocator.cs L11](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Reports/ExecutableLocator.cs#L11)) and `cmd.exe` re-parses `%*` (BatBadBut class). User prompts routinely contain `& | ^ < > "` and `%VAR%`, so passing them as an argument through the shim risks command execution as the user and environment expansion into a prompt that persists as a session name. This breaks the invariant recorded in #52's plan (threat T3: no variable argument through the shim).
+   Either start the node loader or the native binary directly, or send the prompt on stdin without `-p`. **No mitigation was tested here.**
+2. **Test stdin as the only prompt source first** (no `-p`). It is documented, not proven. It would avoid the length limit, the newline truncation and the injection risk.
+3. **#57's design needs a security review** (a threat model of the argv path) before implementation. This is an open item for the owner.
+4. **Test through the backend's real path:** multi-line and long prompts via `ExecutableLocator` plus `ProcessRunner`, not through PowerShell.
+5. **Measure real-session quality** of a digest-based report against a resumed one before relying on it.
+
+If these cannot be met, the fallback is (d).
+
+Open items for the owner:
+- Approve a security review for #57's design (condition 3).
+- Decide whether one confirming run under an empty temp home with the working model is wanted for Q3 (it may start a login prompt, which must be aborted).
 
 ADR-0002 impact if (b) is accepted: the context line "Copilot resumes in place" no longer holds, and the exact-prompt heuristic no longer catches the report session. See the amendment text.
 
@@ -186,23 +227,24 @@ Proposed block to append to `docs/adr/0002-report-forks-never-listed.md`. It edi
 Date: <set when accepted>. Status: Proposed.
 
 - Supersedes the context statement "Copilot resumes in place, so its report turn pollutes the metrics of the original instead":
-  Copilot reports no longer resume the user's session. They start a new session with a digest of the session inside `-p`, in a dedicated report working directory.
-- Extends layer 2 (the exact-prompt heuristic): for Copilot it no longer identifies the report session, because the first user message is the prompt plus the digest.
-  The report session is hidden from the index by its working directory (the same rule as the skill-analysis sessions) instead.
+  Copilot reports no longer resume the user's session. They start a new session with a digest of the session, in a dedicated report working directory.
+- Extends layer 2 (the exact-prompt heuristic): if the digest is part of the first user message, the exact-prompt rule no longer identifies the report session.
+  The report session is then hidden from the index by its working directory (the same rule as the skill-analysis sessions) instead.
+- Security constraint: session text (user prompts, the compaction recap) must not be passed as an argument through the `copilot.cmd` shim, because `cmd.exe` re-parses the arguments (BatBadBut class). The report run starts the node loader or the native binary directly, or sends the prompt on stdin. The design needs a security review before implementation.
 - Layer 5 (excluding the report turn from the original session's metrics) stays for sessions reported before this change.
 - The report session is still visible in Copilot's own resume list. This is accepted, and #57 may delete it by id after the run.
-- Requires `copilot` 1.0.116 behaviour: stdin is ignored with `-p`, and multi-line `-p` values are truncated by the `copilot.cmd` shim, so the digest is one line.
+- Open until tested by the implementing issue: whether stdin alone works as a prompt source, how multi-line and long prompts behave through the backend's own process path, and the quality of a digest-based report on a real session. This amendment does not depend on stdin being ignored.
 ```
 
 ## 8. Observations for the owner (not fixed here)
 
-- **Evolve's Copilot lockdown probably fails on this version.** [SkillAnalyzer.cs L70](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/SkillAnalyzer.cs#L70)
+- **Evolve's Copilot lockdown may fail on this version (one run on 1.0.114).** [SkillAnalyzer.cs L70](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/SkillAnalyzer.cs#L70)
   passes `--deny-tool "*" --deny-url "*"`. Run 1 passed `--deny-tool '*'` to 1.0.114 and exited 1 with `Invalid --deny-tool value. Error: Invalid rule format: *`.
-  One run. `--deny-url '*'` was not tested. The orchestrator files a separate issue.
-- **Evolve's piped input is probably ignored.** The same code pipes its examples on stdin
-  ([L82](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/SkillAnalyzer.cs#L82)). Run 7 showed `-p` ignoring stdin. Not tested on Evolve itself.
+  One run, 1.0.114 only (not re-run on 1.0.116). `--deny-url '*'` was not tested. The orchestrator files a separate issue.
+- **Evolve's piped input may be ignored.** The same code pipes its examples on stdin together with `-p`
+  ([L82](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/SkillAnalyzer.cs#L82)). Run 7 showed one case of `-p` ignoring stdin when both were given. Not tested on Evolve itself.
 - **Evolve sessions are visible in Copilot's own list (owner check).** The owner's picker showed an Evolve-created session (prompt "Find repeated task patterns in the following user requests...", in the Evolve working directory, created six days earlier). Evolve's Copilot runs therefore also leave sessions in the user's history.
-- **`copilot.cmd` shim:** a multi-line `-p` value truncates the argument list. This applies to any caller that locates `copilot` through the npm shim, including `ReportCoordinator` if it ever builds a multi-line prompt.
+- **Multi-line `-p` (run 9, mechanism not determined):** a multi-line `-p` value lost the arguments after the first newline when the experiment helper started `copilot.cmd`. It was not tested through the backend's `ExecutableLocator` and `ProcessRunner`, so whether `ReportCoordinator` would be affected is open.
 - **The CLI auto-updated mid-experiment** (1.0.114 to 1.0.116). Findings from run 4 onward are on 1.0.116.
 - **Real-home runs load the user's plugins and hooks** even with `--no-custom-instructions`, so the reports also contained an unrelated plugin notice.
 
@@ -220,13 +262,13 @@ Runs (counter 10 of 14):
 | 4 | first turn of the throwaway, `claude-sonnet-5.5`, `--resume=<id>` | real | exit 0: `Three primes: 2, 3, 5.`; 1 premium request |
 | 5 | baseline report, F3 plus pin plus lockdown | real | exit 0; events 20 to 32; 1 premium request |
 | 6 | probe: "What was the last thing you produced...?" | real | exit 0: answered that it was the markdown report |
-| 7 | option (b), stdin | real | exit 0; stdin ignored; first message == prompt |
+| 7 | option (b), stdin | real | exit 0; stdin ignored together with `-p`; first message == prompt |
 | 8 | option (b), `--attachment` `.txt` | real | exit 1: file type not supported (no model call). Left an empty session folder |
-| 9 | option (b), multi-line prompt | real | exit 0 but args truncated by `copilot.cmd`; default model; random session id |
+| 9 | option (b), multi-line prompt | real | exit 0 but later args were lost (started via `copilot.cmd`, truncation mechanism not determined); default model; random session id |
 | 10 | option (b), single-line digest in `-p` | real | exit 0; digest used; 1 premium request |
 
 Flags used on runs 4 to 10: `--no-custom-instructions --disable-builtin-mcps --deny-tool shell --deny-tool write --deny-tool memory --model claude-sonnet-5.5`
-(deviation from F3 and from Evolve: `'*'` is not a valid deny rule on this CLI, and `-p` auto-denies unapproved tools).
+(deviation from F3 and from Evolve: `'*'` was rejected as a deny rule in one run on 1.0.114, and `-p` auto-denies unapproved tools per the help text). Run 9 lost its flags, see the table.
 
 Event types in the throwaway's `events.jsonl` after the report run (counts only, no raw lines):
 `assistant.message=2, assistant.turn_end=2, assistant.turn_start=2, hook.end=4, hook.start=5, instruction.update=1, session.error=1, session.model_change=1, session.resume=2, session.shutdown=3, session.start=1, session.tool_baseline=1, session.usage_checkpoint=2, session.usage_record=2, system.message=1, user.message=2`.

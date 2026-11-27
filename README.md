@@ -85,8 +85,10 @@ with their local startup page.
 `.github/workflows/ci.yml` runs on pull requests and pushes to `main` with read-only permissions.
 
 - `backend` (Windows): .NET build and test of `SessionInsights.slnx`.
-- `frontend` (Ubuntu): install, lint, test and build of `apps/frontend`.
+- `frontend` (Ubuntu): install, lint, format check (Prettier), test and build of `apps/frontend`.
 - `scripts` (Windows): the three PowerShell tests in `scripts/tests` and the Node startup-page test.
+
+The format check compares against LF line endings. On Windows, a checkout made with `core.autocrlf=true` has CRLF working copies, so a local `format:check` reports files that are clean in git; changing the setting afterwards does not rewrite existing files. Use a fresh clone or worktree with `core.autocrlf=false`, or check while ignoring line endings: `pnpm --dir apps/frontend exec prettier . --check --end-of-line auto`.
 
 The release workflows still run their own `release-validation`.
 

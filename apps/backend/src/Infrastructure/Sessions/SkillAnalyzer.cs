@@ -32,8 +32,20 @@ internal sealed class SkillAnalyzer(
     [
         "--silent", "--no-custom-instructions", "--disable-builtin-mcps",
         "--disable-mcp-server", "computer-use", "--no-ask-user",
+        "--available-tools=view", "--sync-session=off", "--disallow-temp-dir",
         "--deny-tool", "shell", "--deny-tool", "write", "--deny-tool", "read",
         "--deny-tool", "url", "--deny-tool", "memory",
+    ];
+
+    // Inherited variables that would widen the permission, tool, instruction, hook, MCP, autonomy or egress
+    // surface, or change which session the child resumes. Auth, host, home, model and provider variables stay.
+    private static readonly string[] CopilotRemovedEnvironment =
+    [
+        "COPILOT_ALLOW_ALL", "COPILOT_ASSISTED_APPROVAL", "COPILOT_PLAN_THEN_AUTOPILOT",
+        "GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS", "GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS",
+        "GITHUB_COPILOT_PROMPT_MODE_WORKSPACE_MCP", "COPILOT_SKILLS_DIRS", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS",
+        "COPILOT_OTEL_ENABLED", "COPILOT_OTEL_FILE_EXPORTER_PATH", "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "COPILOT_ENABLE_INTERRUPTED_SESSION_RESTORE",
     ];
 
     private sealed record PromptExample(string Id, string Text, string SessionId, string SessionTitle);
@@ -93,7 +105,13 @@ internal sealed class SkillAnalyzer(
             {
                 Directory.CreateDirectory(SkillAnalysisActivity.WorkingDirectory);
                 result = await processes.RunAsync(
-                    new ProcessSpec(executable, arguments, SkillAnalysisActivity.WorkingDirectory, environment, standardInput),
+                    new ProcessSpec(
+                        executable,
+                        arguments,
+                        SkillAnalysisActivity.WorkingDirectory,
+                        environment,
+                        standardInput,
+                        cli == SessionSource.Claude ? null : CopilotRemovedEnvironment),
                     linked.Token);
             }
         }

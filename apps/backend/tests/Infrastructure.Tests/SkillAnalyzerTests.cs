@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -72,9 +73,19 @@ public sealed class SkillAnalyzerTests
         [
             "--silent", "--no-custom-instructions", "--disable-builtin-mcps",
             "--disable-mcp-server", "computer-use", "--no-ask-user",
+            "--available-tools=view", "--sync-session=off", "--disallow-temp-dir",
             "--deny-tool", "shell", "--deny-tool", "write", "--deny-tool", "read",
             "--deny-tool", "url", "--deny-tool", "memory",
         ]);
+        captured.RemoveEnvironment.ShouldBe(
+        [
+            "COPILOT_ALLOW_ALL", "COPILOT_ASSISTED_APPROVAL", "COPILOT_PLAN_THEN_AUTOPILOT",
+            "GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS", "GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS",
+            "GITHUB_COPILOT_PROMPT_MODE_WORKSPACE_MCP", "COPILOT_SKILLS_DIRS", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS",
+            "COPILOT_OTEL_ENABLED", "COPILOT_OTEL_FILE_EXPORTER_PATH", "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "COPILOT_ENABLE_INTERRUPTED_SESSION_RESTORE",
+        ]);
+        captured.Environment.ShouldBeNull();
         captured.Arguments.ShouldNotContain("-p");
         captured.Arguments.ShouldAllBe(argument => SafeArgument.IsMatch(argument));
         captured.Arguments.ShouldNotContain(argument => argument.Contains("Prepare release notes"));
@@ -84,6 +95,45 @@ public sealed class SkillAnalyzerTests
         captured.StandardInput.ShouldNotContain("outside the selected range");
         captured.StandardInput.IndexOf("Analyze the JSON requests", StringComparison.Ordinal)
             .ShouldBeLessThan(captured.StandardInput.IndexOf("Prepare release notes", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Copilot_keeps_configured_home_and_never_removes_auth_home_host_model_or_provider_variables()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        ProcessSpec? captured = null;
+        processes.RunAsync(Arg.Do<ProcessSpec>(spec => captured = spec), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty)));
+        var options = Options();
+        options.Value.CopilotHome = "C:\\copilot-home";
+        var session = new Session
+        {
+            Id = "session-a",
+            Source = SessionSource.Copilot,
+            SkillPrompts = [new SkillPrompt("First repeated request", Start), new SkillPrompt("Second repeated request", Start.AddMinutes(1))],
+        };
+
+        await new SkillAnalyzer(locator, processes, activity, options)
+            .AnalyzeAsync([session], null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+
+        captured.ShouldNotBeNull();
+        captured.Environment.ShouldNotBeNull();
+        captured.Environment.ShouldBe(new Dictionary<string, string> { ["COPILOT_HOME"] = "C:\\copilot-home" });
+        captured.RemoveEnvironment.ShouldNotBeNull();
+        captured.RemoveEnvironment.ShouldNotContain("COPILOT_HOME");
+        captured.RemoveEnvironment.ShouldNotContain("COPILOT_GITHUB_TOKEN");
+        captured.RemoveEnvironment.ShouldNotContain("GH_TOKEN");
+        captured.RemoveEnvironment.ShouldNotContain("GITHUB_TOKEN");
+        captured.RemoveEnvironment.ShouldNotContain("COPILOT_GH_HOST");
+        captured.RemoveEnvironment.ShouldNotContain("GH_HOST");
+        captured.RemoveEnvironment.ShouldNotContain("COPILOT_MODEL");
+        captured.RemoveEnvironment.ShouldNotContain("COPILOT_AUTO_UPDATE");
+        captured.RemoveEnvironment.ShouldNotContain("COPILOT_CACHE_HOME");
+        captured.RemoveEnvironment.ShouldNotContain("COPILOT_PROVIDERS_CONFIG");
+        captured.RemoveEnvironment.ShouldNotContain("COPILOT_PROVIDER_API_KEY");
+        captured.RemoveEnvironment.ShouldNotContain("COPILOT_PROVIDER_API_KEY_COMMAND");
+        captured.RemoveEnvironment.ShouldNotContain("COPILOT_PROVIDER_HEADERS");
+        captured.RemoveEnvironment.Intersect(captured.Environment.Keys, StringComparer.OrdinalIgnoreCase).ShouldBeEmpty();
     }
 
     [Fact]
@@ -195,6 +245,8 @@ public sealed class SkillAnalyzerTests
                 && spec.Arguments.Contains("""{"disableAllHooks":true}""")
                 && spec.Environment != null
                 && spec.Environment["CLAUDE_CONFIG_DIR"] == options.Value.ClaudeConfigDir
+                && spec.Environment.Count == 1
+                && spec.RemoveEnvironment == null
                 && spec.StandardInput != null
                 && !spec.Arguments.Any(argument => argument.Contains("compilation errors"))),
             Arg.Any<CancellationToken>());

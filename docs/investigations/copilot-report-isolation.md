@@ -1,8 +1,8 @@
 # Investigation: isolating Copilot report runs from the user's real session
 
-Status: Proposed
+Status: Accepted (option (b), conditional; see section 6)
 Recommended option: (b) no resume, a digest of the session sent to a fresh Copilot run in a dedicated report working directory. Conditional: session text must not pass through `cmd.exe`, and #57's design needs a security review first (see section 6).
-Accepted option:
+Accepted option: (b), accepted by the owner on 2026-11-27 under the conditions listed in sections 1 and 6 (session text never through cmd.exe, "stdin as the only prompt source" tested first, a security review of the argv path before implementation, real-session quality measured). Fallback if the conditions cannot be met: (d).
 
 Issue: [#53](https://github.com/qvotaxon/ai-session-stats/issues/53). Unblocks #57. Overlaps with #52 (Claude), which is parked and not touched here.
 Scope: findings only. No product code, test or ADR file is changed by this document. The ADR-0002 amendment is proposed text below.
@@ -34,7 +34,7 @@ on the toy session, **conditional on all of these**:
 - Quality: a digest without assistant actions or outcomes cannot describe what was done in a real session. Real-session quality was not measured.
 
 If these cannot be met, the fallback is (d), disable Copilot reports, which is the only option with no history effect.
-The owner picks. `Accepted option` is left empty on purpose.
+The owner accepted (b) on 2026-11-27 under the conditions above; the fallback is (d).
 
 ## 2. Environment and version pin
 
@@ -230,7 +230,7 @@ Open items for the owner:
 
 What a confirming Q3 run would change (open item above): if the pinned working model runs under an empty temp home, (c) becomes a candidate without copying credentials, pending step 6 (resuming a copied session under a temp home, not run); feasibility and final cost stay open until step 6 passes. If it fails with an auth error, (c) stays infeasible without copying auth material. It does not make (c) the fallback.
 
-ADR-0002 impact if (b) is accepted: the context line "Copilot resumes in place" no longer holds, and for Copilot the report session is not caught by the exact-prompt check, although the code already applies that check to Copilot ([CopilotSessionReader.cs L345](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/CopilotSessionReader.cs#L345)): the one-line digest in the argument defeats it, so the new layer 6 (a report working directory excluded from the index) is needed. The amendment below proposes that layer.
+ADR-0002 impact of (b), accepted conditionally on 2026-11-27: the context line "Copilot resumes in place" no longer holds, and for Copilot the report session is not caught by the exact-prompt check, although the code already applies that check to Copilot ([CopilotSessionReader.cs L345](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/CopilotSessionReader.cs#L345)): the one-line digest in the argument defeats it, so the new layer 6 (a report working directory excluded from the index) is needed. The amendment below proposes that layer.
 
 ## 7. Proposed ADR-0002 amendment (pure append, not applied)
 
@@ -239,7 +239,7 @@ Proposed block to append to `docs/adr/0002-report-forks-never-listed.md`. It edi
 ```markdown
 ## Amendment (Copilot, proposed by #53)
 
-Date: <set when accepted>. Status: Proposed.
+Date: <set when accepted>. Status: Proposed. Option (b) was accepted conditionally on 2026-11-27 (see section 1); this amendment is not applied yet.
 
 - Supersedes the context statement "Copilot resumes in place, so its report turn pollutes the metrics of the original instead":
   Copilot reports no longer resume the user's session. They start a new session with a digest of the session, in a dedicated report working directory.

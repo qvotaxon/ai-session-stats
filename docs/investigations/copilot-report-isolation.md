@@ -83,7 +83,7 @@ copilot help sessions
 
 ### Q2. Option (b): no resume, summary on stdin
 
-Answer: stdin does not work, but the summary inside the `-p` argument does.
+Answer: stdin together with `-p` was ignored (run 7, one run). Stdin alone (without `-p`) was **not tested**. A one-line digest inside `-p` worked (run 10), but that path depends on the section 6 conditions (the `cmd.exe` argument-injection risk).
 
 ```powershell
 # run 7, scratch cwd "cwd-b", no resume, transcript piped on stdin
@@ -100,7 +100,7 @@ $prompt='Give me a session report in markdown format. Transcript of the session 
 - **Argument (run 10):** the report used the transcript. The first `user.message` was the prompt plus the digest (151 characters, not an exact match of the prompt).
 - **New session on disk:** yes, in both cases. The folder is `session-state/<id>` in the Copilot home, `workspace.yaml` carries the cwd of the report run, and its name is the prompt (plus the digest in run 10).
 - **Exclusion in this app:**
-  - With stdin, `LooksLikeReportFork` would catch the session (first human message equals the prompt:
+  - With stdin together with `-p` (run 7), `LooksLikeReportFork` would catch the session (first human message equals the prompt:
     [CopilotSessionReader.cs L345](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/CopilotSessionReader.cs#L345)).
   - With the digest in the argument it does not match any more. The in-app exclusion would have to be a dedicated report working directory, the same pattern as
     [`IsSkillAnalysisSession`](https://github.com/qvotaxon/ai-session-stats/blob/c6cb4e8d0f72305fa3391b690bc7ce8d38abd9e2/apps/backend/src/Infrastructure/Sessions/SessionIndex.cs#L125) and Evolve's working directory
@@ -230,7 +230,7 @@ Date: <set when accepted>. Status: Proposed.
   Copilot reports no longer resume the user's session. They start a new session with a digest of the session, in a dedicated report working directory.
 - Extends layer 2 (the exact-prompt heuristic): if the digest is part of the first user message, the exact-prompt rule no longer identifies the report session.
   The report session is then hidden from the index by its working directory (the same rule as the skill-analysis sessions) instead.
-- Security constraint: session text (user prompts, the compaction recap) must not be passed as an argument through the `copilot.cmd` shim, because `cmd.exe` re-parses the arguments (BatBadBut class). The report run starts the node loader or the native binary directly, or sends the prompt on stdin. The design needs a security review before implementation.
+- Security constraint: session text (user prompts, the compaction recap) must not be passed as an argument through the `copilot.cmd` shim, because `cmd.exe` re-parses the arguments (BatBadBut class). The report run starts the node loader or the native binary directly, or sends the prompt on stdin without `-p`. The design needs a security review before implementation.
 - Layer 5 (excluding the report turn from the original session's metrics) stays for sessions reported before this change.
 - The report session is still visible in Copilot's own resume list. This is accepted, and #57 may delete it by id after the run.
 - Open until tested by the implementing issue: whether stdin alone works as a prompt source, how multi-line and long prompts behave through the backend's own process path, and the quality of a digest-based report on a real session. This amendment does not depend on stdin being ignored.

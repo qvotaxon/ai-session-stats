@@ -1,16 +1,23 @@
-# ADR-0001: Loopback-only access with a local token instead of Entra ID / MSAL
+# ADR-0001 – Loopback-only access with a local token instead of Entra ID / MSAL
 
-- Status: Accepted
-- Date: 2026-01-10
+## Status
 
-## Context
+Accepted (2026-01-10)
+
+## Prologue (Summary)
+
+In the context of Session Insights, a single-user tool that runs as a Scheduled Task on the developer's own machine and reads files in that user's profile, facing MSDC doctrine's default of Microsoft Entra ID for every web application while the tool has no tenant, no remote users and must work offline, we decided for loopback-only access on `127.0.0.1:5180` with Host and Origin checks and a 256-bit local token required on `/api/**`, to achieve an API with no MSAL or Entra dependency that works offline and exposes metrics only, accepting that another process running as the same Windows user can read the token file, and that hosting the tool for more than one person supersedes this ADR.
+
+_Prologue added when this record was converted to the Alexandrian template (#102). It restates the record below and changes no decision._
+
+## Discussion (Context)
 
 MSDC doctrine defaults to Microsoft Entra ID (MSAL on the client, JWT bearer on the API) for every web application.
 Session Insights is different in kind: a single-user tool that runs as a Scheduled Task on the developer's own machine,
 reads files in that user's profile (`~/.copilot`, `~/.claude`) and has no tenant, no shared data and no remote users.
 There is no app registration to point at, the tool must work offline, and the data it exposes is the user's own metrics.
 
-## Decision
+## Solution (Decision)
 
 - Kestrel binds to `127.0.0.1:5180` only. No other interface is ever opened.
 - `Host` and `Origin` are checked against a loopback allow-list (403 otherwise) to defeat DNS rebinding and cross-site calls from a browser.
@@ -22,7 +29,7 @@ There is no app registration to point at, the tool must work offline, and the da
 - The API exposes metrics only: never prompt or response text, tool arguments or tool output. The single, bounded exception is
   the session `recap` on the detail endpoint: a CLI-written summary (max 2000 chars) that the user's own tools already stored.
 
-## Consequences
+## Consequences (Results)
 
 - No MSAL, no Entra dependency, works offline.
 - Another process running as the same Windows user can read the token file. That is the same trust boundary as the session files themselves.

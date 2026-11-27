@@ -1,10 +1,22 @@
-# ADR 0003: Tray self-update from GitHub Releases
+# ADR-0003 – Tray self-update from GitHub Releases
 
 ## Status
 
 Accepted
 
-## Decision
+## Prologue (Summary)
+
+In the context of keeping installed copies of Session Insights up to date, facing a concern that was not recorded (see Discussion), we decided for a tray that checks the latest stable GitHub Release at startup, every four hours and on demand, and an updater that verifies the archive's SHA-256 and swaps only the app folder with rollback, to achieve updates without a source checkout, pnpm or a .NET SDK or runtime, accepting that users must trust this repository's release maintainers and GitHub's HTTPS delivery, because the SHA-256 file does not authenticate a publisher.
+
+> TODO: confirm the context and the concern this decision addressed; the record states neither.
+
+_Prologue added when this record was converted to the Alexandrian template (#102). It restates the record below and changes no decision._
+
+## Discussion (Context)
+
+No context was recorded when this decision was taken.
+
+## Solution (Decision)
 
 The Windows tray checks the current application's public `/version` endpoint and compares it with the latest stable GitHub Release tag. It checks at startup, every four hours, and on demand. Prereleases are not considered.
 
@@ -28,7 +40,7 @@ Failure cleanup releases the update lock before displaying the error dialog, so 
 
 On a health-check timeout, the log also records the last HTTP error, server task state and result, and the process listening on the configured port (if any). Rollback retains a replaced but failed application in an `app-failed-*` directory for inspection instead of deleting it.
 
-## Consequences
+## Consequences (Results)
 
 - Users can update without a source checkout, pnpm, or a .NET SDK/runtime.
 - Users must trust this repository's release maintainers and GitHub's HTTPS delivery; the SHA-256 file alone does not authenticate a publisher.

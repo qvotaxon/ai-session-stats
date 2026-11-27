@@ -1,15 +1,22 @@
-# ADR-0002: Report-run forks are never listed as sessions
+# ADR-0002 – Report-run forks are never listed as sessions
 
-- Status: Accepted
-- Date: 2026-01-10
+## Status
 
-## Context
+Accepted (2026-01-10)
+
+## Prologue (Summary)
+
+In the context of reports produced by resuming a session in its CLI, where `claude --fork-session` creates a new session file and Copilot resumes in place, facing forks that would show up as sessions of their own and could be reported on again, and a Copilot report turn that would pollute the metrics of the original session, we decided for several independent layers, any one of which hides a fork, with the Copilot report turn, and everything until the next real user message, excluded from the original session's tokens, tools, hooks, turns and subagents, to achieve that forks never appear, even after a restart, accepting that a genuine session that starts with exactly the report prompt is hidden.
+
+_Prologue added when this record was converted to the Alexandrian template (#102). It restates the record below and changes no decision._
+
+## Discussion (Context)
 
 A report is produced by resuming the session in its CLI. `claude --fork-session` creates a **new** session file that
 copies the history and ends with the report prompt. Left alone it would show up as a session of its own and, worse,
 could be reported on again. Copilot resumes in place, so its report turn pollutes the metrics of the original instead.
 
-## Decision
+## Solution (Decision)
 
 Several independent layers; any one of them hides a fork:
 
@@ -19,7 +26,7 @@ Several independent layers; any one of them hides a fork:
 4. `GET /sessions/{id}` and report start go through the same index, so an excluded id gives 404 and can never be reported.
 5. Copilot: the report prompt turn (and everything until the next real user message) is excluded from tokens, tools, hooks, turns and subagents.
 
-## Consequences
+## Consequences (Results)
 
 - Forks never appear, even after a restart, and exclusion survives deletion of the index (it is a file, not memory).
 - A genuine human session that starts with exactly the report prompt is hidden. Accepted: it is indistinguishable from a fork.

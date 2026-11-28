@@ -221,6 +221,7 @@ const EvolveForm = ({ initialSession }: { initialSession?: string }) => {
                     analysis.reset();
                   }}
                   className="mt-1"
+                  aria-describedby="evolve-provider-remark"
                 />
                 <span>
                   I consent to sending the selected user requests to the installed{" "}
@@ -229,6 +230,12 @@ const EvolveForm = ({ initialSession }: { initialSession?: string }) => {
                   directly.
                 </span>
               </label>
+              <p id="evolve-provider-remark" className="text-sm text-muted-foreground">
+                Where the requests go depends on how the {cli === "claude" ? "Claude Code" : "GitHub Copilot"} CLI is
+                configured. By default it sends them to{" "}
+                {cli === "claude" ? "Anthropic's service" : "GitHub's Copilot service"}, but you or your organization
+                can configure it to use another AI provider. Session Insights does not check that configuration.
+              </p>
               {invalidRange && (
                 <p role="alert" className="text-sm text-destructive">
                   The start time must be on or before the end time.

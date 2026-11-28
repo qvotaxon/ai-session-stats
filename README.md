@@ -11,8 +11,8 @@ session can contribute requests even if it started before the range.
 
 Evolve finds recurring patterns in actual requests and asks the selected, locally installed
 Claude Code or GitHub Copilot CLI to draft reusable skill instructions. Analysis does not run
-until you explicitly consent. The selected CLI may send those requests to its configured AI
-service; Session Insights itself does not call an AI web API. Requests are held in memory for
+until you explicitly consent. The selected CLI may send those requests to the AI provider it is
+configured to use, which Session Insights does not check; Session Insights itself does not call an AI web API. Requests are held in memory for
 local analysis and are never returned by the Session Insights API. The CLI may retain its own
 session history. Evolve does not create or install skill files.
 

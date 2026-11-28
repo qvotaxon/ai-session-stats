@@ -124,7 +124,7 @@ internal sealed class ClaudeSessionReader(
 
                         case "attachment":
                             var attachment = root.Get("attachment");
-                            if (isMainFile && HarnessEvidence.Claude(attachment, at, root.Str("version")) is { } observation)
+                            if (isMainFile && HarnessEvidence.Claude(attachment, at, root.Str("version"), options.Value.HarnessPluginName) is { } observation)
                             {
                                 acc.HarnessObservations.Add(observation);
                             }

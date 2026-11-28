@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -12,17 +13,19 @@ internal static class HarnessEvidence
     private static readonly Regex VersionPattern = new(
         @"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
-    private static readonly Regex ClaudePath = new(
-        @"(?:^|[\\/])msdc-harness[\\/]+(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)[\\/]+",
-        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    private static readonly ConcurrentDictionary<string, Regex> ClaudePaths = new();
 
     public static string? Version(string? value) =>
         value is { Length: > 0 and <= 120 } && VersionPattern.IsMatch(value) ? value : null;
 
-    public static bool IsPlugin(string? name) =>
-        name is "msdc-harness" or "msdc-harness@msdc-plugins";
+    public static bool IsPlugin(string? name, string pluginName, string marketplace) =>
+        name == pluginName || name == $"{pluginName}@{marketplace}";
 
-    public static HarnessObservation? Claude(JsonElement? attachment, DateTimeOffset? at, string? cliVersion)
+    private static Regex ClaudePath(string pluginName) => ClaudePaths.GetOrAdd(pluginName, name => new Regex(
+        $@"(?:^|[\\/]){Regex.Escape(name)}[\\/]+(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)[\\/]+",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking));
+
+    public static HarnessObservation? Claude(JsonElement? attachment, DateTimeOffset? at, string? cliVersion, string pluginName)
     {
         if (attachment.Str("hookEvent") != "SessionStart")
         {
@@ -32,13 +35,14 @@ internal static class HarnessEvidence
         var stdout = attachment.Str("stdout");
         var versions = stdout is null
             ? []
-            : ClaudePath.Matches(stdout).Select(m => Version(m.Groups["version"].Value)).OfType<string>().Distinct().ToArray();
+            : ClaudePath(pluginName).Matches(stdout).Select(m => Version(m.Groups["version"].Value)).OfType<string>().Distinct().ToArray();
         return new HarnessObservation(at, "activation", versions.Length == 1 ? versions[0] : null,
             versions.Length switch { 0 => "unknown", 1 => "hookPath", _ => "conflicting" }, Version(cliVersion));
     }
 
-    public static HarnessObservation? Copilot(JsonElement? data, DateTimeOffset? at, string? cliVersion) =>
-        IsPlugin(data.Str("pluginName"))
+    public static HarnessObservation? Copilot(
+        JsonElement? data, DateTimeOffset? at, string? cliVersion, string pluginName, string marketplace) =>
+        IsPlugin(data.Str("pluginName"), pluginName, marketplace)
             ? new HarnessObservation(at, "invocation", Version(data.Str("pluginVersion")),
                 Version(data.Str("pluginVersion")) is null ? "unknown" : "invocation", Version(cliVersion))
             : null;

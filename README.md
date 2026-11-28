@@ -88,7 +88,7 @@ with their local startup page.
 - `frontend` (Ubuntu): install, lint, format check (Prettier), test and build of `apps/frontend`.
 - `scripts` (Windows): the three PowerShell tests in `scripts/tests` and the Node startup-page test.
 
-The format check compares against LF line endings. On Windows, a checkout made with `core.autocrlf=true` has CRLF working copies, so a local `format:check` reports files that are clean in git; changing the setting afterwards does not rewrite existing files. Use a fresh clone or worktree with `core.autocrlf=false`, or check while ignoring line endings: `pnpm --dir apps/frontend exec prettier . --check --end-of-line auto`.
+The format check compares against LF line endings. `apps/frontend/.gitattributes` (`* text=auto eol=lf`) makes git write LF working copies under `apps/frontend`, also on Windows with `core.autocrlf=true` (see [ADR-0012](docs/adr/0012-scope-lf-line-endings-to-the-frontend.md)). A fresh clone or worktree gets them directly. An existing checkout keeps its CRLF files until refreshed: with a clean working tree, delete the files under `apps/frontend` and run `git checkout -- apps/frontend`, or re-clone. Line endings elsewhere in the repository are unchanged.
 
 The release workflows still run their own `release-validation`.
 

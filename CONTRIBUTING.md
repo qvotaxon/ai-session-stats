@@ -56,6 +56,10 @@ Every agent run starts here (pick-up step 1). It needs no PR or issue number, be
 2. Skip any issue not labelled `agent-ready`, any labelled `needs-human-decision` or `cross-repo`, and any whose body starts with `Filed by local agent`. For each other issue, read the issues its "Depends on" names, either in a `Depends on:` header line or under a `### Depends on` heading.
 3. If it names at least one, and every one is `CLOSED` with `COMPLETED` (`gh issue view <d> --json state,stateReason`), run `gh issue edit <m> --remove-label status:blocked`. Leave every other issue as it is; the owner handles a dependency closed for another reason.
 
+## Security
+
+Report vulnerabilities privately, never in an issue or pull request. See [SECURITY.md](SECURITY.md), which also has rules for AI agents.
+
 ## Architecture Decision Records
 
 ADRs in `docs/adr/` follow the Alexandrian template: the rules are in `.github/instructions/adr.instructions.md` and the template is `docs/adr/template.md`.

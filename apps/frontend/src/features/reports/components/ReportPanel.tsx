@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import { useCancelReport, useDownloadReport, useGenerateReport, useReportContent } from "../hooks/useReports";
 import { useReportPanel } from "../hooks/useReportPanel";
+import type { SessionSource } from "@/features/sessions/schemas";
 import type { ReportRun } from "../schemas";
 import { MarkdownView } from "@/common/MarkdownView";
 import { ReportStatusBadge } from "./ReportStatusBadge";
@@ -66,7 +67,7 @@ const ReportBody = ({ sessionId, run }: { sessionId: string; run: ReportRun | nu
   );
 };
 
-export const ReportPanel = ({ sessionId }: { sessionId: string }) => {
+export const ReportPanel = ({ sessionId, source }: { sessionId: string; source: SessionSource }) => {
   const { runsQuery, runs, activeRun, selectedRun, hasReport, pickRun, clearPick } = useReportPanel(sessionId);
   const generate = useGenerateReport(sessionId);
   const cancel = useCancelReport(sessionId);
@@ -100,6 +101,7 @@ export const ReportPanel = ({ sessionId }: { sessionId: string }) => {
                 })
               }
               disabled={busy}
+              aria-describedby="report-provider-remark"
             >
               {busy ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -112,6 +114,12 @@ export const ReportPanel = ({ sessionId }: { sessionId: string }) => {
             </Button>
           </div>
         </div>
+        <p id="report-provider-remark" className="text-sm text-muted-foreground">
+          Generating a report resumes this whole session in the {source === "claude" ? "Claude Code" : "GitHub Copilot"}{" "}
+          CLI, not just selected requests. Where the session goes depends on how that CLI is configured. By default it
+          sends it to {source === "claude" ? "Anthropic's service" : "GitHub's Copilot service"}, but you or your
+          organization can configure it to use another AI provider. Session Insights does not check that configuration.
+        </p>
 
         {runs.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">

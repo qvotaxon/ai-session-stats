@@ -116,7 +116,7 @@ export const SessionDetailView = ({ session }: { session: SessionDetail }) => (
       </CardContent>
     </Card>
 
-    <ReportPanel sessionId={session.id} />
+    <ReportPanel sessionId={session.id} source={session.source} />
 
     <Separator />
 

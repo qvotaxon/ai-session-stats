@@ -1,6 +1,6 @@
 Refs #
 <!--
-Line 1 links the issue: `Refs #<n>` while the pull request is a draft.
+Line 1 links the issue: `Refs #<n>` until the next line allows `Fixes #<n>`.
 Change `Refs #<n>` to `Fixes #<n>` only when the review gate has passed and CI is green on the latest commit. Any commit after the review goes back to review.
 The owner marks the pull request ready and merges it.
 Agents: the "Repository conventions" section of AGENTS.md governs this pull request.
@@ -34,7 +34,9 @@ Status: <one line>
 - [ ] `powershell -NoProfile -File scripts/tests/update-lock.tests.ps1`
 - [ ] `powershell -NoProfile -File scripts/tests/claude-statusline.tests.ps1`
 - [ ] `node --test scripts/tests/startup-page.test.mjs`
-- [ ] Not applicable (docs only): <why>
+- [ ] `node --test scripts/tests/check-adr-headings.test.mjs`
+- [ ] `node scripts/check-adr-headings.mjs docs/adr`
+- [ ] Not applicable (docs only; a change under `docs/adr/` runs the two ADR checks): <why>
 
 ## Scope notes
 

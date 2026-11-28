@@ -40,6 +40,15 @@ internal sealed class ProcessRunner : IProcessRunner
             }
         }
 
+        // Names only: ProcessStartInfo.Environment is case-insensitive on Windows.
+        if (spec.RemoveEnvironment is not null)
+        {
+            foreach (var key in spec.RemoveEnvironment)
+            {
+                info.Environment.Remove(key);
+            }
+        }
+
         using var process = new Process { StartInfo = info };
         process.Start();
 

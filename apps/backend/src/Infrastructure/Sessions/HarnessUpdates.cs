@@ -25,8 +25,8 @@ internal sealed class HarnessUpdates(
     TimeProvider clock,
     ILogger<HarnessUpdates> logger) : BackgroundService, IHarnessUpdates
 {
-    private const string Marketplace = "msdc-plugins";
-    private const string Plugin = "msdc-harness";
+    private string Marketplace => options.Value.HarnessMarketplace;
+    private string Plugin => options.Value.HarnessPluginName;
     private static readonly string[] CopilotCatalogPaths =
         ["marketplace.json", ".plugin/marketplace.json", ".github/plugin/marketplace.json", ".claude-plugin/marketplace.json"];
     private static readonly string[] CopilotManifestPaths =
@@ -244,7 +244,7 @@ internal sealed class HarnessUpdates(
             var browse = await CommandAsync(source, ["plugin", "marketplace", "browse", Marketplace, "--json"], token, copilotCache);
             using var json = JsonDocument.Parse(browse);
             // Copilot's browse projection can omit version even when the catalog declares it.
-            version = HarnessEntry(json.RootElement).Str("version") ?? await CopilotCatalogVersionAsync(copilotCache, token);
+            version = HarnessEntry(json.RootElement, Plugin).Str("version") ?? await CopilotCatalogVersionAsync(copilotCache, token);
         }
         else
         {
@@ -255,7 +255,7 @@ internal sealed class HarnessUpdates(
             var marketplaceRoot = known.RootElement.Get(Marketplace).Str("installLocation")
                 ?? throw new InvalidOperationException("The registered Claude marketplace has no local catalog.");
             using var catalog = await ReadJsonAsync(fs.Path.Combine(marketplaceRoot, ".claude-plugin", "marketplace.json"), token);
-            var plugin = HarnessEntry(catalog.RootElement);
+            var plugin = HarnessEntry(catalog.RootElement, Plugin);
             version = plugin.Str("version");
             if (version is null && plugin.Str("source") is { } path && path.StartsWith("./", StringComparison.Ordinal))
             {
@@ -276,14 +276,14 @@ internal sealed class HarnessUpdates(
         return version;
     }
 
-    private static JsonElement? HarnessEntry(JsonElement catalog)
+    private static JsonElement? HarnessEntry(JsonElement catalog, string plugin)
     {
         var plugins = catalog.ValueKind == JsonValueKind.Array ? catalog : catalog.Get("plugins");
         if (plugins is not { ValueKind: JsonValueKind.Array } array)
         {
             throw new InvalidOperationException("Marketplace returned an unsupported catalog structure.");
         }
-        var matches = array.EnumerateArray().Where(p => ((JsonElement?)p).Str("name") == Plugin).ToArray();
+        var matches = array.EnumerateArray().Where(p => ((JsonElement?)p).Str("name") == plugin).ToArray();
         if (matches.Length != 1)
         {
             throw new InvalidOperationException("The marketplace must contain exactly one MSDC harness entry.");
@@ -326,7 +326,7 @@ internal sealed class HarnessUpdates(
         {
             throw new InvalidOperationException("The refreshed Copilot catalog did not match the registered marketplace.");
         }
-        var plugin = HarnessEntry(catalog.RootElement);
+        var plugin = HarnessEntry(catalog.RootElement, Plugin);
         if (plugin.Str("version") is { } version) { return version; }
         if (plugin.Str("source") is not { Length: > 0 } path || fs.Path.IsPathRooted(path)) { return null; }
         if (FindMarketplaceFile(marketplaceRoot, [fs.Path.Combine(path, "plugin.json")]) is { } rootManifestPath)

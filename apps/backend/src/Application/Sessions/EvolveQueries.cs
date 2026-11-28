@@ -17,9 +17,15 @@ public sealed record SkillEvidence(string SessionId, string Title, int Occurrenc
 public sealed record SkillOpportunity(string Id, string Title, string Outline, string Instructions, int Occurrences, int SessionCount, IReadOnlyList<SkillEvidence> Evidence);
 public sealed record SkillAnalysis(int SessionsScanned, int RequestsAnalyzed, bool Sampled, IReadOnlyList<SkillOpportunity> Opportunities);
 
+public enum SkillAnalysisScope
+{
+    Session,
+    Project,
+}
+
 public interface ISkillAnalyzer
 {
-    Task<SkillAnalysis> AnalyzeAsync(IReadOnlyList<Session> sessions, DateTimeOffset? from, DateTimeOffset? to, SessionSource cli, CancellationToken cancellationToken);
+    Task<SkillAnalysis> AnalyzeAsync(IReadOnlyList<Session> sessions, DateTimeOffset? from, DateTimeOffset? to, SessionSource cli, SkillAnalysisScope scope, CancellationToken cancellationToken);
 }
 
 public sealed record ListEvolveProjectsQuery : IQuery<IReadOnlyList<EvolveProject>>;
@@ -92,7 +98,8 @@ public sealed class EvolveQueryHandler(ISessionIndex index, ISkillAnalyzer analy
         }
 
         return await analyzer.AnalyzeAsync(sessions, query.From, query.To,
-            query.Cli == "claude" ? SessionSource.Claude : SessionSource.Copilot, cancellationToken);
+            query.Cli == "claude" ? SessionSource.Claude : SessionSource.Copilot,
+            query.SessionId is null ? SkillAnalysisScope.Project : SkillAnalysisScope.Session, cancellationToken);
     }
 
     private static string? ProjectId(Session session)

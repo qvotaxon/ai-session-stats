@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 
 namespace SessionInsights.Application.Common;
 
@@ -20,12 +21,23 @@ public sealed class SessionInsightsOptions
     public string CopilotCliPath { get; set; } = "copilot";
     public string ClaudeCliPath { get; set; } = "claude";
     public string? StaticFilesPath { get; set; }
+    public string HarnessPluginName { get; set; } = "msdc-harness";
+    public string HarnessMarketplace { get; set; } = "msdc-plugins";
     public int Port { get; set; } = 5180;
     public TimeSpan IndexRefreshInterval { get; set; } = TimeSpan.FromSeconds(15);
 
+    public bool HasValidHarnessNames() => IsHarnessName(HarnessPluginName) && IsHarnessName(HarnessMarketplace);
+
+    private static bool IsHarnessName(string? value) =>
+        value is { Length: > 0 and <= 100 } && char.IsAsciiLetterOrDigit(value[0])
+        && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-');
+
     public string ResolveCopilotRoot() =>
-        !string.IsNullOrWhiteSpace(CopilotRoot) ? CopilotRoot : Path.Combine(
-            FirstConfigured(CopilotHome, Environment.GetEnvironmentVariable("COPILOT_HOME")) ?? Path.Combine(UserProfile(), ".copilot"), "session-state");
+        !string.IsNullOrWhiteSpace(CopilotRoot) ? CopilotRoot : Path.Combine(ResolveCopilotHome(), "session-state");
+
+    /// <summary>The COPILOT_HOME a spawned Copilot CLI uses: the configured home, else the inherited variable, else the profile default.</summary>
+    public string ResolveCopilotHome() =>
+        FirstConfigured(CopilotHome, Environment.GetEnvironmentVariable("COPILOT_HOME")) ?? Path.Combine(UserProfile(), ".copilot");
 
     public string ResolveClaudeRoot() =>
         !string.IsNullOrWhiteSpace(ClaudeRoot) ? ClaudeRoot : Path.Combine(

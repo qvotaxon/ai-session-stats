@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -23,6 +24,18 @@ internal sealed class HarnessInventory(
     private readonly SemaphoreSlim gate = new(1, 1);
     private IReadOnlyList<HarnessInventoryDto>? snapshot;
     private DateTimeOffset refreshedAt;
+    private readonly ConcurrentDictionary<string, bool> renameWarned = [];
+
+    private static (string? Name, string? Marketplace) SplitId(string? id)
+    {
+        if (id is null)
+        {
+            return (null, null);
+        }
+
+        var at = id.LastIndexOf('@');
+        return at < 0 ? (id, null) : (id[..at], id[(at + 1)..]);
+    }
 
     public async Task<IReadOnlyList<HarnessInventoryDto>> GetAsync(CancellationToken cancellationToken, bool refresh = false)
     {
@@ -83,6 +96,7 @@ internal sealed class HarnessInventory(
             }
 
             var installations = new List<HarnessInstallationDto>();
+            var renamed = false;
             foreach (var item in array.EnumerateArray())
             {
                 JsonElement? plugin = item;
@@ -91,10 +105,15 @@ internal sealed class HarnessInventory(
                     return Failure(wire, at, "Plugin listing returned an unsupported plugin entry.");
                 }
 
-                var matches = source == SessionSource.Claude
-                    ? plugin.Str("id") == "msdc-harness@msdc-plugins"
-                    : plugin.Str("name") == "msdc-harness" && plugin.Str("marketplace") == "msdc-plugins";
-                if (!matches)
+                var (name, marketplace) = source == SessionSource.Claude
+                    ? SplitId(plugin.Str("id"))
+                    : (plugin.Str("name"), plugin.Str("marketplace"));
+                if (marketplace == options.Value.HarnessMarketplace && name != options.Value.HarnessPluginName)
+                {
+                    renamed = true;
+                }
+
+                if (name != options.Value.HarnessPluginName || marketplace != options.Value.HarnessMarketplace)
                 {
                     continue;
                 }
@@ -107,6 +126,17 @@ internal sealed class HarnessInventory(
                 var scope = plugin.Str("scope");
                 installations.Add(new HarnessInstallationDto(version, plugin.Bool("enabled"),
                     scope is "user" or "project" or "local" or "managed" ? scope : null));
+            }
+
+            if (installations.Count == 0 && renamed)
+            {
+                var message = $"A plugin from marketplace {options.Value.HarnessMarketplace} is installed under a name other than {options.Value.HarnessPluginName}.";
+                if (renameWarned.TryAdd(wire, true))
+                {
+                    logger.LogWarning("Harness inventory for {Source}: {Message}", wire, message);
+                }
+
+                return new HarnessInventoryDto(wire, "renamed", at, [], message);
             }
 
             return new HarnessInventoryDto(wire, installations.Count == 0 ? "notInstalled" : "installed", at, installations, null);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -7,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SessionInsights.Application.Common;
 using SessionInsights.Application.Sessions;
@@ -18,11 +20,37 @@ internal sealed class SkillAnalyzer(
     IExecutableLocator locator,
     IProcessRunner processes,
     ISkillAnalysisActivity activity,
-    IOptions<SessionInsightsOptions> options) : ISkillAnalyzer
+    IOptions<SessionInsightsOptions> options,
+    IEvolveSessionCleanup cleanup,
+    ILogger<SkillAnalyzer> logger) : ISkillAnalyzer
 {
     private const int MaxRequests = 60;
     private const int MaxPromptLength = 1000;
     private static readonly TimeSpan AnalysisTimeout = TimeSpan.FromMinutes(2);
+
+    // The six characters backslash, u, 0, 0, 4, 0: the JSON escape for '@'.
+    private const string EscapedAt = "\\" + "u0040";
+
+    // No -p: with -p the CLI ignores stdin and a multi-line argument is cut at the first newline (#99).
+    private static readonly string[] CopilotArguments =
+    [
+        "--silent", "--no-custom-instructions", "--disable-builtin-mcps",
+        "--disable-mcp-server", "computer-use", "--no-ask-user",
+        "--available-tools=view", "--sync-session=off", "--disallow-temp-dir",
+        "--deny-tool", "shell", "--deny-tool", "write", "--deny-tool", "read",
+        "--deny-tool", "url", "--deny-tool", "memory",
+    ];
+
+    // Inherited variables that would widen the permission, tool, instruction, hook, MCP, autonomy or egress
+    // surface, or change which session the child resumes. Auth, host, home, model and provider variables stay.
+    private static readonly string[] CopilotRemovedEnvironment =
+    [
+        "COPILOT_ALLOW_ALL", "COPILOT_ASSISTED_APPROVAL", "COPILOT_PLAN_THEN_AUTOPILOT",
+        "GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS", "GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS",
+        "GITHUB_COPILOT_PROMPT_MODE_WORKSPACE_MCP", "COPILOT_SKILLS_DIRS", "COPILOT_CUSTOM_INSTRUCTIONS_DIRS",
+        "COPILOT_OTEL_ENABLED", "COPILOT_OTEL_FILE_EXPORTER_PATH", "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "COPILOT_ENABLE_INTERRUPTED_SESSION_RESTORE",
+    ];
 
     private sealed record PromptExample(string Id, string Text, string SessionId, string SessionTitle);
     private sealed record SuggestedSkill(string? Title, string? Description, string? Instructions, string[]? RequestIds);
@@ -32,6 +60,7 @@ internal sealed class SkillAnalyzer(
         DateTimeOffset? from,
         DateTimeOffset? to,
         SessionSource cli,
+        SkillAnalysisScope scope,
         CancellationToken cancellationToken)
     {
         var candidates = sessions
@@ -51,8 +80,25 @@ internal sealed class SkillAnalyzer(
                 item.Session.Id,
                 item.Session.Title))
             .ToArray();
+        var inputChars = examples.Sum(example => example.Text.Length);
+        var stopwatch = Stopwatch.StartNew();
+
+        // Counts and codes only: no request text, title, path or model output.
+        void LogAnalysis(string outcome, int stdoutChars = 0, int opportunityCount = 0) =>
+            logger.LogInformation(
+                "Skill analysis finished: Cli={Cli} Scope={Scope} RequestCount={RequestCount} InputChars={InputChars} ElapsedMs={ElapsedMs} Outcome={Outcome} StdoutChars={StdoutChars} OpportunityCount={OpportunityCount}",
+                cli == SessionSource.Claude ? "claude" : "copilot",
+                scope == SkillAnalysisScope.Project ? "project" : "session",
+                examples.Length,
+                inputChars,
+                stopwatch.ElapsedMilliseconds,
+                outcome,
+                stdoutChars,
+                opportunityCount);
+
         if (examples.Length < 2)
         {
+            LogAnalysis("ok");
             return new SkillAnalysis(sessions.Count, examples.Length, sampled, []);
         }
 
@@ -60,49 +106,103 @@ internal sealed class SkillAnalyzer(
         var executable = locator.Locate(cliName);
         if (executable is null)
         {
+            LogAnalysis("cli-error");
             throw new UnprocessableException($"The {cliName} CLI was not found. Install it or select the other CLI.");
         }
 
         var prompt = BuildPrompt();
         var input = JsonSerializer.Serialize(examples.Select(example => new { id = example.Id, prompt = example.Text }));
-        var arguments = cli == SessionSource.Claude
-            ? new[] { "-p", prompt, "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--settings", """{"disableAllHooks":true}""" }
-            : new[] { "-p", prompt, "--silent", "--no-custom-instructions", "--disable-builtin-mcps", "--deny-tool", "*", "--deny-url", "*" };
+        string[] arguments;
+        string? copilotSessionId = null;
+        var existedBeforeRun = false;
+        if (cli == SessionSource.Claude)
+        {
+            arguments = ["-p", prompt, "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--settings", """{"disableAllHooks":true}"""];
+        }
+        else
+        {
+            // The app's own id, so the session this run creates can be found and removed afterwards.
+            copilotSessionId = Guid.NewGuid().ToString("D");
+            existedBeforeRun = cleanup.Exists(copilotSessionId);
+            if (existedBeforeRun)
+            {
+                // --session-id resumes an existing session: launching would append this untrusted input to it.
+                LogAnalysis("cli-error");
+                throw new UnprocessableException("Could not start the analysis. Try again.");
+            }
+
+            arguments = [.. CopilotArguments, "--session-id", copilotSessionId];
+        }
+
+        // The Copilot CLI turns "@<path>" in piped input into a file attachment, so escape it (same JSON meaning).
+        var standardInput = cli == SessionSource.Claude ? input : $"{prompt}\n\n{input.Replace("@", EscapedAt)}";
         var environment = CliEnvironment(cli);
 
         ProcessResult result;
-        try
+        using (activity.BeginAnalysis())
         {
-            using (activity.BeginAnalysis())
             using (var timeout = new CancellationTokenSource(AnalysisTimeout))
             using (var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token))
             {
-                Directory.CreateDirectory(SkillAnalysisActivity.WorkingDirectory);
-                result = await processes.RunAsync(
-                    new ProcessSpec(executable, arguments, SkillAnalysisActivity.WorkingDirectory, environment, input),
-                    linked.Token);
+                try
+                {
+                    Directory.CreateDirectory(SkillAnalysisActivity.WorkingDirectory);
+                    result = await processes.RunAsync(
+                        new ProcessSpec(
+                            executable,
+                            arguments,
+                            SkillAnalysisActivity.WorkingDirectory,
+                            environment,
+                            standardInput,
+                            cli == SessionSource.Claude ? null : CopilotRemovedEnvironment),
+                        linked.Token);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    LogAnalysis("timeout");
+                    throw new UnprocessableException("Skill analysis timed out after 2 minutes. Try a smaller date range.");
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
+                {
+                    LogAnalysis("cli-error");
+                    throw new UnprocessableException($"Could not run the {cliName} CLI: {ex.Message}");
+                }
             }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            throw new UnprocessableException("Skill analysis timed out after 2 minutes. Try a smaller date range.");
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            throw new UnprocessableException($"Could not run the {cliName} CLI: {ex.Message}");
+
+            // Reached only after a normal return, never on cancel, timeout or an I/O failure while the process may
+            // still run. Inside the analysis lease so SessionIndex keeps holding the new folder back while it is
+            // removed, and outside the try so no unexpected failure is turned into an API message. CancellationToken.None:
+            // the process has ended, the cleanup is short, and skipping it on a late cancel would leave the digest behind.
+            if (copilotSessionId is not null)
+            {
+                await cleanup.RemoveAsync(copilotSessionId, existedBeforeRun, CancellationToken.None);
+            }
         }
 
         if (result.ExitCode != 0)
         {
+            // Codes only: stdout and stderr can hold the user's prompts and the model's reply.
+            logger.LogWarning("Skill analysis {Cli} CLI exited with code {ExitCode}", cli, result.ExitCode);
+            LogAnalysis("cli-error", result.StdOut.Length);
             throw new UnprocessableException($"The {cliName} CLI exited with code {result.ExitCode}.");
         }
 
-        var output = cli == SessionSource.Claude ? ClaudeResult(result.StdOut) : result.StdOut;
-        var suggestions = ParseSuggestions(output);
+        SuggestedSkill[] suggestions;
+        try
+        {
+            var output = cli == SessionSource.Claude ? ClaudeResult(result.StdOut) : result.StdOut;
+            suggestions = ParseSuggestions(output, cli);
+        }
+        catch (Exception ex) when (ex is UnprocessableException or JsonException or InvalidOperationException)
+        {
+            LogAnalysis("invalid-json", result.StdOut.Length);
+            throw;
+        }
+
         var byId = examples.ToDictionary(example => example.Id, StringComparer.Ordinal);
         var opportunities = new List<SkillOpportunity>();
         foreach (var suggestion in suggestions.Take(8))
@@ -146,6 +246,7 @@ internal sealed class SkillAnalyzer(
                 evidence));
         }
 
+        LogAnalysis("ok", result.StdOut.Length, opportunities.Count);
         return new SkillAnalysis(sessions.Count, examples.Length, sampled, opportunities);
     }
 
@@ -162,7 +263,7 @@ internal sealed class SkillAnalyzer(
             """;
     }
 
-    private static SuggestedSkill[] ParseSuggestions(string output)
+    private SuggestedSkill[] ParseSuggestions(string output, SessionSource cli)
     {
         try
         {
@@ -182,6 +283,11 @@ internal sealed class SkillAnalyzer(
         }
         catch (JsonException)
         {
+            // Lengths and codes only: the output holds the user's prompts and the model's reply.
+            logger.LogWarning(
+                "Skill analysis output from {Cli} was not a valid analysis ({OutputLength} characters)",
+                cli,
+                output.Length);
             throw new UnprocessableException("The selected CLI returned an invalid skill analysis. Try again.");
         }
     }
@@ -191,6 +297,11 @@ internal sealed class SkillAnalyzer(
         try
         {
             using var document = JsonDocument.Parse(output);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException();
+            }
+
             return document.RootElement.TryGetProperty("result", out var result) && result.ValueKind == JsonValueKind.String
                 ? result.GetString() ?? string.Empty
                 : output;

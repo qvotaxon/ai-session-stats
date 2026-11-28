@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddSingleton<ISessionSourceReader, ClaudeSessionReader>();
         services.AddSingleton<SkillAnalysisActivity>();
         services.AddSingleton<ISkillAnalysisActivity>(sp => sp.GetRequiredService<SkillAnalysisActivity>());
+        services.AddSingleton<IEvolveSessionCleanup, CopilotEvolveSessionCleanup>();
         services.AddSingleton<ISkillAnalyzer, SkillAnalyzer>();
         services.AddSingleton<IExcludedSessions, ExcludedSessionsStore>();
         services.AddSingleton<ISessionIndex, SessionIndex>();

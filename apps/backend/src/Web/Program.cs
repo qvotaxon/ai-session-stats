@@ -27,6 +27,9 @@ var builder = WebApplication.CreateBuilder(args);
 var bootstrap = new SessionInsightsOptions();
 builder.Configuration.GetSection(SessionInsightsOptions.SectionName).Bind(bootstrap);
 builder.Services.Configure<SessionInsightsOptions>(builder.Configuration.GetSection(SessionInsightsOptions.SectionName));
+builder.Services.AddOptions<SessionInsightsOptions>()
+    .Validate(o => o.HasValidHarnessNames(), "HarnessPluginName and HarnessMarketplace must start with a letter or digit and contain only letters, digits, '.', '_' or '-'.")
+    .ValidateOnStart();
 builder.Services.PostConfigure<SessionInsightsOptions>(o =>
     o.StaticFilesPath ??= builder.Configuration["Frontend:StaticFilesPath"]);
 
@@ -40,7 +43,10 @@ builder.Host.UseSerilog((context, services, logger) => logger
         Path.Combine(bootstrap.ResolveDataRoot(), "logs", "session-insights-.log"),
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 14,
-        shared: true));
+        shared: true),
+    // Each host keeps its own logger: the static Log.Logger is process-wide, so hosts that share a process (the web tests) would
+    // otherwise route Microsoft.Extensions.Logging to whichever host was built last, and close it when that host is disposed.
+    preserveStaticLogger: true);
 
 // Loopback only: Kestrel never listens on another interface, whatever ASPNETCORE_URLS says.
 builder.WebHost.ConfigureKestrel(kestrel => kestrel.Listen(IPAddress.Loopback, bootstrap.Port));

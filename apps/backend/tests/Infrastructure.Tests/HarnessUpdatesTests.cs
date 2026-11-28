@@ -112,6 +112,55 @@ public sealed class HarnessUpdatesTests
         fs.Directory.Exists(cache.ShouldNotBeNull()).ShouldBeFalse();
     }
 
+    [Fact]
+    public async Task Copilot_update_uses_the_configured_plugin_and_marketplace_names()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var options = Options();
+        options.Value.HarnessPluginName = "acme-harness";
+        options.Value.HarnessMarketplace = "acme-plugins";
+        var updated = false;
+        var inventory = Substitute.For<IHarnessInventory>();
+        inventory.GetAsync(Arg.Any<CancellationToken>(), true).Returns(_ =>
+            (IReadOnlyList<HarnessInventoryDto>)
+            [
+                new("claude", "notInstalled", Now, [], null),
+                new("copilot", "installed", Now, [new(updated ? "0.29.0" : "0.28.0", true, "user")], null),
+            ]);
+        var locator = Substitute.For<IExecutableLocator>();
+        locator.Locate(Arg.Any<string>()).Returns("/bin/cli");
+        var processes = Substitute.For<IProcessRunner>();
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var arguments = call.Arg<ProcessSpec>().Arguments;
+            if (arguments.SequenceEqual(new[] { "plugin", "marketplace", "browse", "acme-plugins", "--json" }))
+            {
+                return new ProcessResult(0, """[{"name":"acme-harness","version":"0.29.0"},{"name":"msdc-harness","version":"9.9.9"}]""", "");
+            }
+
+            updated |= arguments.SequenceEqual(new[] { "plugin", "update", "acme-harness@acme-plugins" });
+            return new ProcessResult(0, "", "");
+        });
+        using var updates = new HarnessUpdates(inventory, locator, processes, new MockFileSystem(),
+            options, TimeProvider.System, NullLogger<HarnessUpdates>.Instance);
+        HarnessUpdateDto State() => updates.Get().Single(s => s.Source == "copilot");
+
+        await updates.StartAsync(token);
+        try
+        {
+            await WaitForAsync(() => State().Available, token);
+            updates.Start("copilot");
+            await WaitForAsync(() => State().Status is "succeeded" or "error", token);
+            State().Status.ShouldBe("succeeded");
+        }
+        finally
+        {
+            await updates.StopAsync(token);
+        }
+
+        updated.ShouldBeTrue();
+    }
+
     [Theory]
     [InlineData(true, true)]
     [InlineData(true, false)]

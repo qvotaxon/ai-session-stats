@@ -17,9 +17,7 @@ const ChangelogPage = () => (
     <p className="text-sm text-muted-foreground">
       Release history included with this build. Available offline; newer releases appear after updating the app.
     </p>
-    <MarkdownView className="rounded-md border p-4 text-sm">
-      {changelog.replace(/^# Changelog\r?\n+/, "")}
-    </MarkdownView>
+    <MarkdownView className="rounded-md border p-4 text-sm">{changelog.replace(/^# Changelog\r?\n+/, "")}</MarkdownView>
   </div>
 );
 

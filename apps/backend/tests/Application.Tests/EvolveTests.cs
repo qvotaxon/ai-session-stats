@@ -43,7 +43,8 @@ public sealed class EvolveTests
         suggestion.Id.ShouldBe("skill");
         suggestion.Occurrences.ShouldBe(2);
         suggestion.SessionCount.ShouldBe(2);
-        suggestion.Evidence.Select(e => e.SessionId).ShouldBe([.. new[] { a.Id, b.Id }.Order(StringComparer.Ordinal)]);
+        // The handler passes the analyzer's evidence through untouched; ordering is the analyzer's job (see SkillAnalyzerTests).
+        suggestion.Evidence.Select(e => e.SessionId).ShouldBe([a.Id, b.Id]);
         analyzer.Sessions.Select(s => s.Id).ShouldBe([a.Id, b.Id]);
         analyzer.From.ShouldBe(Start);
         analyzer.To.ShouldBe(Start.AddHours(1));
@@ -94,6 +95,7 @@ public sealed class EvolveTests
         public DateTimeOffset? From { get; private set; }
         public DateTimeOffset? To { get; private set; }
         public SessionSource Cli { get; private set; }
+        public SkillAnalysisScope Scope { get; private set; }
         public SkillAnalysis Result { get; set; } = new(0, 0, false, []);
 
         public Task<SkillAnalysis> AnalyzeAsync(
@@ -101,12 +103,14 @@ public sealed class EvolveTests
             DateTimeOffset? from,
             DateTimeOffset? to,
             SessionSource cli,
+            SkillAnalysisScope scope,
             CancellationToken cancellationToken)
         {
             Sessions = sessions;
             From = from;
             To = to;
             Cli = cli;
+            Scope = scope;
             return Task.FromResult(Result);
         }
     }

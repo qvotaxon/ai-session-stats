@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build
+        run: dotnet build SessionInsights.slnx -c Release
+      - name: Test
+        run: dotnet test SessionInsights.slnx -c Release --no-build
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+      - name: Install
+        run: pnpm --dir apps/frontend install --frozen-lockfile
+      - name: Lint
+        run: pnpm --dir apps/frontend run lint
+      - name: Format check
+        run: pnpm --dir apps/frontend run format:check
+      - name: Test
+        run: pnpm --dir apps/frontend run test
+      - name: Build
+        run: pnpm --dir apps/frontend run build
+
+  scripts:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Release readiness tests
+        run: ./scripts/tests/release-readiness.tests.ps1
+      - name: Update lock tests
+        run: ./scripts/tests/update-lock.tests.ps1
+      - name: Claude statusline tests
+        run: ./scripts/tests/claude-statusline.tests.ps1
+      - name: Startup page tests
+        run: node --test scripts/tests/startup-page.test.mjs

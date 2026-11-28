@@ -41,6 +41,7 @@ jobs:
         shell: powershell
         run: |
           ./scripts/tests/release-readiness.tests.ps1
+          ./scripts/tests/provenance-verify.tests.ps1
           ./scripts/tests/update-lock.tests.ps1
           node --test scripts/tests/startup-page.test.mjs
 

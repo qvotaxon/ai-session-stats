@@ -12,7 +12,7 @@ Always: never merge, close or approve a pull request, or close an issue; the own
 
 ### Branch and worktree
 
-- First check for existing work: `gh pr list --state all --search "#<n> in:body"` and `git ls-remote --heads origin '<n>-*'`. If either finds this issue's pull request or branch, or your tool already opened one, continue on it (for a found branch: work in the folder `git worktree list` shows for it, else `git fetch origin` then `git worktree add <path> <type>/<n>-<short-slug>`; then `git merge origin/<type>/<n>-<short-slug>`). If it is merged or closed, stop and ask the owner.
+- First check for existing work: `gh pr list --state all --search "#<n> in:body"` and `git ls-remote --heads origin '<n>-*'`. If either finds this issue's pull request or branch, or your tool already opened one, continue on it (for a found branch: `git fetch origin`, then work in the folder `git worktree list` shows for it (if that is the main checkout, stop and ask the owner), else `git worktree add <path> <type>/<n>-<short-slug>`; then `git merge origin/<type>/<n>-<short-slug>`). If it is merged or closed, stop and ask the owner.
 - Otherwise run `git fetch origin` and `git worktree add -b <type>/<n>-<short-slug> <path> origin/main`, where `<path>` is a folder outside the main checkout, such as `../wt-<n>-<short-slug>`. In the main checkout, never switch branches, commit, push or edit tracked files.
 - To update a branch that has a pull request, run `git fetch origin` and `git merge origin/main`. Never rebase it and never force-push.
 
@@ -41,5 +41,5 @@ Always: never merge, close or approve a pull request, or close an issue; the own
 - Every issue body and comment you write, also on pull requests, starts with the line `Filed by local agent`. Cloud agents too. Pull request bodies and commit messages do not.
 - Found a bug or other work outside the task? File it as its own issue (marker first, no labels) and keep it out of this pull request.
 - Never create a label. Add or remove a label only where a documented step tells you to.
-- Never skip, weaken or delete a test, or edit a failing test to make it pass, unless the issue says that test is wrong. Re-run the tests before you report them green, and name the command and its result; the review gate confirms it.
+- Never skip, weaken or delete a test, or edit a failing test to make it pass, unless the owner says in the issue that the test is wrong. Re-run the tests before you report them green, and name the command and its result; the review gate confirms it.
 - Add no package (NuGet, npm, PowerShell module or GitHub Action) without asking the owner first.

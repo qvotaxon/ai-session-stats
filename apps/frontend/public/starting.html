@@ -60,7 +60,7 @@
             if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
                 message.textContent = "The configured server port is invalid.";
             } else {
-                const base = `http://localhost:${port}`;
+                const base = `http://localhost:${Number(port)}`;
                 setTimeout(() => {
                     message.textContent =
                         "Still waiting for the server. If this continues, check that Session Insights is running.";

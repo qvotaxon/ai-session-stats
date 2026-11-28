@@ -88,7 +88,7 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path.Value);
+            logger.LogError(ex, "Unhandled exception while processing request");
             await ProblemWriter.WriteAsync(context, StatusCodes.Status500InternalServerError, "Internal Server Error", "An unexpected error occurred.");
         }
     }

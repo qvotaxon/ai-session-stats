@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.4.0](https://github.com/qvotaxon/ai-session-stats/compare/v1.3.0...v1.4.0) (2026-11-28)
+
+
+### Features
+
+* **evolve:** log analysis duration, input size and output size ([#116](https://github.com/qvotaxon/ai-session-stats/issues/116)) ([7e72b12](https://github.com/qvotaxon/ai-session-stats/commit/7e72b12486950f82a41ba2d7526c40d98440aadf))
+* show Claude subscription allowance ([#34](https://github.com/qvotaxon/ai-session-stats/issues/34)) ([9fa278d](https://github.com/qvotaxon/ai-session-stats/commit/9fa278dfaec81a16cc8313c90cef1093cdb308f0))
+* **versioning:** configure harness plugin and marketplace names ([#114](https://github.com/qvotaxon/ai-session-stats/issues/114)) ([05d9ffe](https://github.com/qvotaxon/ai-session-stats/commit/05d9ffe49d53406ca117fb48ab56c3ad3a282dc2))
+
+
+### Bug Fixes
+
+* **evolve:** lock down Evolve's Copilot analysis and remove its leftover session ([#105](https://github.com/qvotaxon/ai-session-stats/issues/105)) ([e2b9bd3](https://github.com/qvotaxon/ai-session-stats/commit/e2b9bd31ee49f770eaae18b288d56a2d2ee68203))
+* **evolve:** remove false "uses no AI models" claim from page heading ([#96](https://github.com/qvotaxon/ai-session-stats/issues/96)) ([d255f0d](https://github.com/qvotaxon/ai-session-stats/commit/d255f0d25b8ddaa48f02b36aa4213ade78bebb96)), closes [#49](https://github.com/qvotaxon/ai-session-stats/issues/49)
+* **evolve:** say where Evolve's AI requests go ([#123](https://github.com/qvotaxon/ai-session-stats/issues/123)) ([4200305](https://github.com/qvotaxon/ai-session-stats/commit/4200305e953de4a8ee577d49343a74b78c140689))
+* keep each host's Serilog logger instead of the static one ([#89](https://github.com/qvotaxon/ai-session-stats/issues/89)) ([2c9aae8](https://github.com/qvotaxon/ai-session-stats/commit/2c9aae86a8d85ccaca600f2cd2058449d7f3e9ca)), closes [#87](https://github.com/qvotaxon/ai-session-stats/issues/87)
+* make the Evolve handler test independent of random session ids ([#92](https://github.com/qvotaxon/ai-session-stats/issues/92)) ([56560cc](https://github.com/qvotaxon/ai-session-stats/commit/56560cc6c586a1fb71c7b5f071f37dfc47db3a7c)), closes [#88](https://github.com/qvotaxon/ai-session-stats/issues/88)
+* refresh Claude allowance when statusline file already exists ([#37](https://github.com/qvotaxon/ai-session-stats/issues/37)) ([67fcc0a](https://github.com/qvotaxon/ai-session-stats/commit/67fcc0a1b72479010e305a63870375b6448a9c63))
+* **reports:** say where report requests go ([#129](https://github.com/qvotaxon/ai-session-stats/issues/129)) ([0cc271b](https://github.com/qvotaxon/ai-session-stats/commit/0cc271bd7a2c008307c46181bf1b54bbf0670723))
+
 ## [1.3.0](https://github.com/qvotaxon/ai-session-stats/compare/v1.2.0...v1.3.0) (2026-11-18)
 
 

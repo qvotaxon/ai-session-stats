@@ -112,6 +112,9 @@ it("says the CLI's configured provider receives the requests, for both CLIs", as
   renderApp("/evolve");
   await screen.findByRole("heading", { name: "Evolve" });
   expect(screen.getByText(/By default it sends them to GitHub's Copilot service/)).toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: /I consent to sending/ })).toHaveAccessibleDescription(
+    /By default it sends them to GitHub's Copilot service/,
+  );
 
   await user.selectOptions(screen.getByLabelText("Local CLI"), "claude");
 

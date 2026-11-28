@@ -8,7 +8,7 @@ ADRs in `docs/adr/` use the Alexandrian template, always. Before you create, con
 
 ## Repository conventions
 
-Always: never merge, close or approve a pull request, or close an issue; the owner does. The issue, scope, test and package rules also always apply. The branch, commit and pull request rules apply only to tasks that change tracked files; read-only tasks (questions, reviews, plans kept in `.msdc/local/`) skip them.
+Always: never merge, close or approve a pull request, or close an issue; the owner does. The issue, scope, test, package and public-text rules also always apply. The branch, commit and pull request rules apply only to tasks that change tracked files; read-only tasks (questions, reviews, plans kept in `.msdc/local/`) skip them.
 
 ### Branch and worktree
 
@@ -39,6 +39,7 @@ Always: never merge, close or approve a pull request, or close an issue; the own
 ### Issues, scope, tests and packages
 
 - Every issue body and comment you write, also on pull requests, starts with the line `Filed by local agent`. Cloud agents too. Pull request bodies and commit messages do not.
+- Public text: this repository is public. Anything you write to a public surface (pull request titles and bodies, issue comments, commit messages, review comments, ADRs, docs) must never contain local filesystem paths, drive letters, user profile or machine names, usernames or real names, the owner's employer or client names, email addresses, tokens or other environment-specific details. Refer to them generically: "the local worktree", "the main checkout", "the scratch directory". Worktree and branch cleanup notes name the branch only, never the folder. A path or name in the brief you were given is for local commands only: never copy it into published text, and never put one into a brief for another agent that will be published. An agent or person who reviews a pull request treats such a leak as a blocker finding.
 - Found a bug or other work outside the task? File it as its own issue (marker first, no labels) and keep it out of this pull request.
 - Never create a label. Add or remove a label only where a documented step tells you to.
 - Never skip, weaken or delete a test, or edit a failing test to make it pass, unless the owner says in the issue that the test is wrong. Re-run the tests before you report them green, and name the command and its result; the review gate confirms it.

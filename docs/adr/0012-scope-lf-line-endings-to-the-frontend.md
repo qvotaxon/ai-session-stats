@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (2026-11-28). Becomes Accepted when the #109 pull request merges.
+Accepted (2026-11-28)
 
 ## Prologue (Summary)
 
@@ -20,8 +20,9 @@ CI and a README workaround; neither removes the cause.
 Forces and non-goals:
 
 - Prettier documents `* text=auto eol=lf` in a `.gitattributes` as the way to keep LF on Windows (https://prettier.io/docs/options#end-of-line).
-- The Windows CI jobs (`backend`, `scripts`) and the release `installer` job may check out with `core.autocrlf=true`. Whether they do is not
-  verified. A repository-wide rule could change what they see.
+- The Windows CI jobs (`backend`, `scripts`) and the release `installer` job may check out with `core.autocrlf=true`. A repository-wide rule could change
+  what they see.
+  > TODO: confirm whether these jobs check out with `core.autocrlf=true`.
 - Non-goal: a line-ending policy for the backend, the scripts or the installer.
 
 Options considered:

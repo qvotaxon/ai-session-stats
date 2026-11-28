@@ -47,17 +47,22 @@ In the context of detecting which msdc-harness version a Claude or Copilot sessi
 **The line**
 
 - The SessionStart hook prints one line `msdc-harness-version: <name>@<semver>`, for example `msdc-harness-version: msdc-harness@0.29.0`. `<name>` is the plugin name as a marketplace knows it. `<semver>` is the plugin's own version, with an optional pre-release and build part, the same grammar as `VersionPattern` in `HarnessEvidence.cs`.
-- It is ASCII, printed first in the `additionalContext` text, once per session start, on both Claude and Copilot, followed by a line break. The first position keeps it ahead of any truncation of the doctrine text that follows.
+- It is ASCII, printed first in the `additionalContext` text, once per session start, on both Claude and Copilot, followed by a line break. The first position keeps it ahead of any truncation of the doctrine text that follows. The hook's JSON carries the context twice (flat and under `hookSpecificOutput`), so Claude's recorded stdout contains the line twice with the same value; consumers compare distinct values, never occurrences. The hook script documents a 10,000-character output cap, yet Copilot recorded up to about 16,000 characters, so first position is the safest choice but survival of truncation was not verified for Copilot. The doctrine text that follows must not quote the line verbatim, because the consumer matches it anywhere.
 - The prefix `msdc-harness-version:` is fixed and does not follow the plugin name, so a renamed plugin still prints a line that a consumer can read and compare with its configured name (`HarnessPluginName`, #64).
 
 **How a consumer reads it**
 
 - The consumer reads the SessionStart text the transcript recorded: `stdout` for Claude, `output.additionalContext` of the `sessionStart` `hook.end` event for Copilot.
-- It finds the pattern `msdc-harness-version: <name>@<semver>` anywhere in that text, not only at a line start, because Claude records it inside a JSON string. The `<name>` and `<semver>` character classes contain no backslash, quote or whitespace, so the escaped `\n` that follows the line ends the match.
+- It finds the pattern `msdc-harness-version: <name>@<semver>` anywhere in that text, not only at a line start, because Claude records it inside a JSON string. `<name>` is one or more of `A-Z`, `a-z`, `0-9`, `.`, `_` and `-`; `<semver>` follows `VersionPattern`. Neither class contains a backslash, quote or whitespace, so the escaped `\n` that follows the line ends the match.
 - A match whose `<name>` differs from the configured plugin name is ignored, because another plugin may print its own version lines.
 - Fallback order: the contract line, then the install-path regex (Claude only), then `unknown`.
-- Results: one distinct version from the contract is `contract`; a contract version and a path version that disagree, or two distinct contract versions in one SessionStart output, is `conflicting`; a contract version and a path version that agree is `contract` (the contract wins); no match is `unknown`. The evidence value `contract` is added next to `hookPath`, `invocation`, `unknown` and `conflicting`.
-- For Copilot, the `contract` line and the existing `skill.invoked` version are separate observations. A session start that carries the line yields a `contract` observation; the skill-invocation observations stay as they are.
+- Results, from the distinct versions found in one SessionStart output (a contract line counts only when its `<name>` equals the configured plugin name):
+  - contract versions alone: one distinct version gives `contract`; more than one gives `conflicting`;
+  - path versions alone: one distinct version gives `hookPath`; more than one gives `conflicting` (as today);
+  - both present: they agree, so `contract` (the contract wins); they differ, so `conflicting`;
+  - neither: `unknown`, including when the only contract line was ignored for a name mismatch.
+  The evidence value `contract` is added next to `hookPath`, `invocation`, `unknown` and `conflicting`.
+- For Copilot, the `contract` line and the existing `skill.invoked` version are separate observations. A session start that carries the line yields an observation of kind `activation` with evidence `contract`, so activity after it is attributed to that version like a Claude activation; the skill-invocation observations stay as they are.
 
 **Versioning the line**
 

@@ -24,9 +24,39 @@ describe("ReportPanel", () => {
   });
 
   it("offers to generate when there is no report", async () => {
-    renderWithQuery(<ReportPanel sessionId="s-1" />);
+    renderWithQuery(<ReportPanel sessionId="s-1" source="copilot" />);
     expect(await screen.findByText(/No report yet/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generate session report" })).toBeEnabled();
+  });
+
+  it("says the entire session goes to the CLI's configured provider, for Copilot", async () => {
+    renderWithQuery(<ReportPanel sessionId="s-1" source="copilot" />);
+    const button = await screen.findByRole("button", { name: "Generate session report" });
+
+    expect(button).toHaveAccessibleDescription(
+      /resumes this entire session in the GitHub Copilot CLI, so the full session content is processed by it/,
+    );
+    expect(button).toHaveAccessibleDescription(/By default it sends it to GitHub's Copilot service/);
+    expect(button).toHaveAccessibleDescription(/Session Insights does not check that configuration/);
+    expect(screen.getByText(/configure it to use another AI provider/)).toBeInTheDocument();
+    expect(button).toHaveAccessibleDescription(/Where it goes depends on how that CLI is configured/);
+    expect(screen.queryByText(/selected requests/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Anthropic/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/only GitHub/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/never leaves your device/i)).not.toBeInTheDocument();
+  });
+
+  it("names Anthropic's service as the default for Claude, and keeps the description on re-run", async () => {
+    api.list.mockResolvedValue([makeRun()]);
+    api.content.mockResolvedValue("# Report");
+    renderWithQuery(<ReportPanel sessionId="s-1" source="claude" />);
+    const button = await screen.findByRole("button", { name: "Re-run analysis" });
+
+    expect(button).toHaveAccessibleDescription(
+      /resumes this entire session in the Claude Code CLI, so the full session content is processed by it/,
+    );
+    expect(button).toHaveAccessibleDescription(/By default it sends it to Anthropic's service/);
+    expect(screen.queryByText(/GitHub's Copilot service/)).not.toBeInTheDocument();
   });
 
   it("generates, disables the button while running, then polls until the markdown report shows", async () => {
@@ -39,7 +69,7 @@ describe("ReportPanel", () => {
       .mockResolvedValue([makeRun()]); // the next poll
     api.content.mockResolvedValue("# Hello report\n\n| a | b |\n|---|---|\n| 1 | 2 |");
 
-    renderWithQuery(<ReportPanel sessionId="s-1" />);
+    renderWithQuery(<ReportPanel sessionId="s-1" source="copilot" />);
     await user.click(await screen.findByRole("button", { name: "Generate session report" }));
 
     expect(api.create).toHaveBeenCalledWith("s-1");
@@ -62,7 +92,7 @@ describe("ReportPanel", () => {
     api.content.mockImplementation((_s, runId) => Promise.resolve(`# Report from ${runId}`));
     api.download.mockResolvedValue(new Blob(["x"]));
 
-    renderWithQuery(<ReportPanel sessionId="s-1" />);
+    renderWithQuery(<ReportPanel sessionId="s-1" source="copilot" />);
 
     expect(await screen.findByRole("heading", { name: "Report from run-2" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Re-run analysis" })).toBeEnabled();
@@ -73,7 +103,7 @@ describe("ReportPanel", () => {
 
   it("shows the error of a failed run", async () => {
     api.list.mockResolvedValue([makeRun({ status: "failed", error: "CLI exited with code 2" })]);
-    renderWithQuery(<ReportPanel sessionId="s-1" />);
+    renderWithQuery(<ReportPanel sessionId="s-1" source="copilot" />);
     expect(await screen.findByText("CLI exited with code 2")).toBeInTheDocument();
     expect(api.content).not.toHaveBeenCalled();
   });
@@ -81,7 +111,7 @@ describe("ReportPanel", () => {
   it("toasts when a run is already active (409)", async () => {
     const user = userEvent.setup();
     api.create.mockRejectedValue(new ApiError("conflict", 409, "Conflict", null));
-    renderWithQuery(<ReportPanel sessionId="s-1" />);
+    renderWithQuery(<ReportPanel sessionId="s-1" source="copilot" />);
 
     await user.click(await screen.findByRole("button", { name: "Generate session report" }));
 
@@ -95,7 +125,7 @@ describe("ReportPanel", () => {
     const running = makeRun({ status: "running", finishedAt: null });
     api.list.mockResolvedValue([running]);
     api.cancel.mockResolvedValue(makeRun({ status: "cancelled" }));
-    renderWithQuery(<ReportPanel sessionId="s-1" />);
+    renderWithQuery(<ReportPanel sessionId="s-1" source="copilot" />);
 
     await user.click(await screen.findByRole("button", { name: "Cancel" }));
 
@@ -105,7 +135,7 @@ describe("ReportPanel", () => {
   it("never renders raw HTML from the report", async () => {
     api.list.mockResolvedValue([makeRun()]);
     api.content.mockResolvedValue('# Title\n\n<b data-testid="raw">bold</b><script>window.__pwned = 1</script>');
-    const { container } = renderWithQuery(<ReportPanel sessionId="s-1" />);
+    const { container } = renderWithQuery(<ReportPanel sessionId="s-1" source="copilot" />);
 
     await screen.findByRole("heading", { name: "Title" });
     expect(screen.queryByTestId("raw")).not.toBeInTheDocument();

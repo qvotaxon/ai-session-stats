@@ -115,10 +115,11 @@ export const ReportPanel = ({ sessionId, source }: { sessionId: string; source: 
           </div>
         </div>
         <p id="report-provider-remark" className="text-sm text-muted-foreground">
-          Generating a report resumes this whole session in the {source === "claude" ? "Claude Code" : "GitHub Copilot"}{" "}
-          CLI, not just selected requests. Where the session goes depends on how that CLI is configured. By default it
-          sends it to {source === "claude" ? "Anthropic's service" : "GitHub's Copilot service"}, but you or your
-          organization can configure it to use another AI provider. Session Insights does not check that configuration.
+          Generating a report resumes this entire session in the{" "}
+          {source === "claude" ? "Claude Code" : "GitHub Copilot"} CLI, so the full session content is processed by it.
+          Where it goes depends on how that CLI is configured. By default it sends it to{" "}
+          {source === "claude" ? "Anthropic's service" : "GitHub's Copilot service"}, but you or your organization can
+          configure it to use another AI provider. Session Insights does not check that configuration.
         </p>
 
         {runs.length > 0 && (

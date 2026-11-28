@@ -29,14 +29,18 @@ describe("ReportPanel", () => {
     expect(screen.getByRole("button", { name: "Generate session report" })).toBeEnabled();
   });
 
-  it("says the whole session goes to the CLI's configured provider, for Copilot", async () => {
+  it("says the entire session goes to the CLI's configured provider, for Copilot", async () => {
     renderWithQuery(<ReportPanel sessionId="s-1" source="copilot" />);
     const button = await screen.findByRole("button", { name: "Generate session report" });
 
-    expect(button).toHaveAccessibleDescription(/resumes this whole session in the GitHub Copilot CLI/);
+    expect(button).toHaveAccessibleDescription(
+      /resumes this entire session in the GitHub Copilot CLI, so the full session content is processed by it/,
+    );
     expect(button).toHaveAccessibleDescription(/By default it sends it to GitHub's Copilot service/);
     expect(button).toHaveAccessibleDescription(/Session Insights does not check that configuration/);
     expect(screen.getByText(/configure it to use another AI provider/)).toBeInTheDocument();
+    expect(button).toHaveAccessibleDescription(/Where it goes depends on how that CLI is configured/);
+    expect(screen.queryByText(/selected requests/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Anthropic/)).not.toBeInTheDocument();
     expect(screen.queryByText(/only GitHub/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/never leaves your device/i)).not.toBeInTheDocument();
@@ -48,7 +52,9 @@ describe("ReportPanel", () => {
     renderWithQuery(<ReportPanel sessionId="s-1" source="claude" />);
     const button = await screen.findByRole("button", { name: "Re-run analysis" });
 
-    expect(button).toHaveAccessibleDescription(/resumes this whole session in the Claude Code CLI/);
+    expect(button).toHaveAccessibleDescription(
+      /resumes this entire session in the Claude Code CLI, so the full session content is processed by it/,
+    );
     expect(button).toHaveAccessibleDescription(/By default it sends it to Anthropic's service/);
     expect(screen.queryByText(/GitHub's Copilot service/)).not.toBeInTheDocument();
   });

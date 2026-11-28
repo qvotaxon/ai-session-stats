@@ -39,7 +39,7 @@ In the context of detecting which msdc-harness version a Claude or Copilot sessi
 
 - **Keep the path regex only.** Rejected: it is the status quo that silently breaks on a layout change, and Copilot's recorded output contains no install path, so it cannot work there.
 - **Read the version from the installed `plugin.json` at index time.** Rejected: it reports the version installed now, not the one the session ran. An update between the session and the index run attributes the session to the wrong version.
-- **Add a structured key to the hook's JSON output, such as `harnessVersion`.** Rejected: the recorded Copilot `output` object holds only `additionalContext`, and whether the CLI keeps unknown keys was not verified (`> TODO: confirm`). Text inside `additionalContext` is recorded on both surfaces.
+- **Add a structured key to the hook's JSON output, such as `harnessVersion`.** Not chosen: text inside `additionalContext` is already recorded on both surfaces (checked above), so a second channel adds nothing. Whether Copilot keeps unknown keys in its recorded `output` object was not investigated, because the decision does not depend on it.
 - **Rely on Copilot `skill.invoked` events for Copilot.** Kept as the existing evidence, not enough alone: a session without a skill invocation has no version.
 
 ## Solution (Decision)

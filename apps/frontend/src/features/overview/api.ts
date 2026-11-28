@@ -49,7 +49,7 @@ export const overviewSchema = z.object({
 const inventoriesSchema = z.array(
   z.object({
     source: sourceSchema,
-    status: z.enum(["installed", "notInstalled", "unavailable", "error"]),
+    status: z.enum(["installed", "notInstalled", "renamed", "unavailable", "error"]),
     checkedAt: z.string(),
     installations: z.array(
       z.object({ version: z.string(), enabled: z.boolean().nullable(), scope: z.string().nullable() }),

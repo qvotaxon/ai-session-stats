@@ -192,13 +192,17 @@ A guard block is not itself evidence of a regression. Lifetime tokens are never 
 Returns one result per provider:
 ```json
 [
-  { "source":"claude|copilot", "status":"installed|notInstalled|unavailable|error",
+  { "source":"claude|copilot", "status":"installed|notInstalled|renamed|unavailable|error",
     "checkedAt":"iso",
     "installations":[{ "version":"string", "enabled":true, "scope":"user|project|local|managed|null" }],
     "error":"string|null" }
 ]
 ```
-`enabled` can be `null` when the CLI does not expose it. Inventory is read-only and cached for
+`enabled` can be `null` when the CLI does not expose it. `renamed` means a plugin from the configured
+marketplace is installed under a different name than the configured plugin name (`error` carries the
+explanation); it is logged once. The plugin and marketplace names come from the
+`SessionInsights:HarnessPluginName` (default `msdc-harness`) and `SessionInsights:HarnessMarketplace`
+(default `msdc-plugins`) options and are used for inventory, version evidence and updates. Inventory is read-only and cached for
 one minute; each invocation has a 15-second timeout. The only command executed is the resolved
 CLI's `plugin list --json`; it never installs, updates, or invokes a model. Lists can be a JSON
 array or an object with a `plugins` array. Unknown output structures, unsupported versions,

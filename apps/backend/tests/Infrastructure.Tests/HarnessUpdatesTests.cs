@@ -112,6 +112,41 @@ public sealed class HarnessUpdatesTests
         fs.Directory.Exists(cache.ShouldNotBeNull()).ShouldBeFalse();
     }
 
+    [Fact]
+    public async Task Update_check_uses_the_configured_marketplace_name()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var options = Options();
+        options.Value.HarnessPluginName = "acme-harness";
+        options.Value.HarnessMarketplace = "acme-plugins";
+        var inventory = Substitute.For<IHarnessInventory>();
+        inventory.GetAsync(Arg.Any<CancellationToken>(), true).Returns(
+            (IReadOnlyList<HarnessInventoryDto>)
+            [
+                new("claude", "installed", Now, [new("0.28.0", true, null)], null),
+                new("copilot", "notInstalled", Now, [], null),
+            ]);
+        var locator = Substitute.For<IExecutableLocator>();
+        locator.Locate(Arg.Any<string>()).Returns("/bin/cli");
+        var processes = Substitute.For<IProcessRunner>();
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>()).Returns(new ProcessResult(1, "", ""));
+        using var updates = new HarnessUpdates(inventory, locator, processes, new MockFileSystem(),
+            options, TimeProvider.System, NullLogger<HarnessUpdates>.Instance);
+
+        await updates.StartAsync(token);
+        try
+        {
+            await WaitForAsync(() => updates.Get().Single(s => s.Source == "claude").Status == "error", token);
+        }
+        finally
+        {
+            await updates.StopAsync(token);
+        }
+
+        await processes.Received().RunAsync(Arg.Is<ProcessSpec>(p =>
+            p.Arguments.SequenceEqual(new[] { "plugin", "marketplace", "update", "acme-plugins" })), Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(true, true)]
     [InlineData(true, false)]

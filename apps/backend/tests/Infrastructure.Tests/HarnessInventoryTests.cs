@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Shouldly;
@@ -39,6 +40,31 @@ public sealed class HarnessInventoryTests
         result[1].Installations.Single().Enabled.ShouldBe(false);
         await processes.Received(2).RunAsync(Arg.Is<ProcessSpec>(p =>
             p.Arguments.SequenceEqual(new[] { "plugin", "list", "--json" })), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Inventory_matches_configured_names_and_reports_a_renamed_plugin_once()
+    {
+        var locator = Substitute.For<IExecutableLocator>();
+        locator.Locate(Arg.Any<string>()).Returns(c => $"/bin/{c.Arg<string>()}");
+        var processes = Substitute.For<IProcessRunner>();
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>()).Returns(c =>
+            Task.FromResult(new ProcessResult(0,
+                c.Arg<ProcessSpec>().FileName.EndsWith("claude", StringComparison.Ordinal)
+                    ? """[{"id":"acme.harness@acme-plugins","version":"1.0.0","scope":"user","enabled":true}]"""
+                    : """{"plugins":[{"name":"acme-harness-v2","marketplace":"acme-plugins","version":"2.0.0"},{"name":"msdc-harness","marketplace":"msdc-plugins","version":"9.9.9"}]}""", "")));
+        var options = Options();
+        options.Value.HarnessPluginName = "acme.harness";
+        options.Value.HarnessMarketplace = "acme-plugins";
+        var logger = new ListLogger<HarnessInventory>();
+        var inventory = new HarnessInventory(locator, processes, options, TimeProvider.System, logger);
+
+        var result = await inventory.GetAsync(TestContext.Current.CancellationToken);
+        await inventory.GetAsync(TestContext.Current.CancellationToken, refresh: true);
+
+        result.Select(r => r.Status).ShouldBe(["installed", "renamed"]);
+        result[0].Installations.Single().Version.ShouldBe("1.0.0");
+        logger.Entries.Count(e => e.Level == LogLevel.Warning && e.Template.Contains("{Message}", StringComparison.Ordinal)).ShouldBe(1);
     }
 
     [Theory]

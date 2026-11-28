@@ -213,7 +213,7 @@ internal sealed class CopilotSessionReader(
 
                     case "skill.invoked" or "skill.invoked_ref" when !inWindow:
                         acc.Skill(data.Str("name") ?? "unknown");
-                        if (HarnessEvidence.Copilot(data, at, cliVersion) is { } observation)
+                        if (HarnessEvidence.Copilot(data, at, cliVersion, options.Value.HarnessPluginName, options.Value.HarnessMarketplace) is { } observation)
                         {
                             acc.HarnessObservations.Add(observation);
                         }

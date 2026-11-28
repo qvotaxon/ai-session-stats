@@ -72,6 +72,28 @@ public sealed class HarnessReaderTests
     }
 
     [Fact]
+    public void Claude_and_Copilot_evidence_follow_the_configured_plugin_name_and_escape_it()
+    {
+        var options = Settings;
+        options.Value.HarnessPluginName = "acme.harness";
+        options.Value.HarnessMarketplace = "acme-plugins";
+        var id = NewId();
+        WriteLines(fs, Path.Combine(options.Value.ClaudeRoot!, "project", $"{id}.jsonl"),
+            [Activation(0, null, stdout: @"C:\plugins\acme.harness\1.2.3\scripts"),
+            Activation(1, null, stdout: @"C:\plugins\acmeXharness\1.2.4\scripts"),
+            Activation(2, null, stdout: @"C:\plugins\msdc-harness\0.26.1\scripts")]);
+        var reader = new ClaudeSessionReader(fs, options, NullLogger<ClaudeSessionReader>.Instance);
+
+        var session = reader.Parse(reader.Discover().Single(), Now)!;
+
+        session.Harness.Observations.Select(o => (o.Version, o.Evidence))
+            .ShouldBe([("1.2.3", "hookPath"), (null, "unknown"), (null, "unknown")]);
+        HarnessEvidence.IsPlugin("acme.harness@acme-plugins", "acme.harness", "acme-plugins").ShouldBeTrue();
+        HarnessEvidence.IsPlugin("msdc-harness", "acme.harness", "acme-plugins").ShouldBeFalse();
+        HarnessEvidence.IsPlugin("acmeXharness", "acme.harness", "acme-plugins").ShouldBeFalse();
+    }
+
+    [Fact]
     public void Claude_splits_resumed_versions_and_does_not_assign_unknown_or_cross_boundary_activity()
     {
         var session = Claude(

@@ -20,6 +20,8 @@ public sealed class SessionInsightsOptions
     public string CopilotCliPath { get; set; } = "copilot";
     public string ClaudeCliPath { get; set; } = "claude";
     public string? StaticFilesPath { get; set; }
+    public string HarnessPluginName { get; set; } = "msdc-harness";
+    public string HarnessMarketplace { get; set; } = "msdc-plugins";
     public int Port { get; set; } = 5180;
     public TimeSpan IndexRefreshInterval { get; set; } = TimeSpan.FromSeconds(15);
 

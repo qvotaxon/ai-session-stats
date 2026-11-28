@@ -27,6 +27,9 @@ var builder = WebApplication.CreateBuilder(args);
 var bootstrap = new SessionInsightsOptions();
 builder.Configuration.GetSection(SessionInsightsOptions.SectionName).Bind(bootstrap);
 builder.Services.Configure<SessionInsightsOptions>(builder.Configuration.GetSection(SessionInsightsOptions.SectionName));
+builder.Services.AddOptions<SessionInsightsOptions>()
+    .Validate(o => o.HasValidHarnessNames(), "HarnessPluginName and HarnessMarketplace must start with a letter or digit and contain only letters, digits, '.', '_' or '-'.")
+    .ValidateOnStart();
 builder.Services.PostConfigure<SessionInsightsOptions>(o =>
     o.StaticFilesPath ??= builder.Configuration["Frontend:StaticFilesPath"]);
 

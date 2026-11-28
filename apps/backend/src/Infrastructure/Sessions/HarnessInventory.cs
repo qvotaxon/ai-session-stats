@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -23,7 +24,7 @@ internal sealed class HarnessInventory(
     private readonly SemaphoreSlim gate = new(1, 1);
     private IReadOnlyList<HarnessInventoryDto>? snapshot;
     private DateTimeOffset refreshedAt;
-    private int renameWarned;
+    private readonly ConcurrentDictionary<string, bool> renameWarned = [];
 
     private static (string Name, string? Marketplace) SplitId(string id)
     {
@@ -125,7 +126,7 @@ internal sealed class HarnessInventory(
             if (installations.Count == 0 && renamed)
             {
                 var message = $"A plugin from marketplace {options.Value.HarnessMarketplace} is installed under a name other than {options.Value.HarnessPluginName}.";
-                if (Interlocked.Exchange(ref renameWarned, 1) == 0)
+                if (renameWarned.TryAdd(wire, true))
                 {
                     logger.LogWarning("Harness inventory for {Source}: {Message}", wire, message);
                 }

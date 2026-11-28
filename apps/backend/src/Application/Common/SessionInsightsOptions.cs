@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 
 namespace SessionInsights.Application.Common;
 
@@ -24,6 +25,12 @@ public sealed class SessionInsightsOptions
     public string HarnessMarketplace { get; set; } = "msdc-plugins";
     public int Port { get; set; } = 5180;
     public TimeSpan IndexRefreshInterval { get; set; } = TimeSpan.FromSeconds(15);
+
+    public bool HasValidHarnessNames() => IsHarnessName(HarnessPluginName) && IsHarnessName(HarnessMarketplace);
+
+    private static bool IsHarnessName(string? value) =>
+        value is { Length: > 0 and <= 100 } && char.IsAsciiLetterOrDigit(value[0])
+        && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-');
 
     public string ResolveCopilotRoot() =>
         !string.IsNullOrWhiteSpace(CopilotRoot) ? CopilotRoot : Path.Combine(ResolveCopilotHome(), "session-state");

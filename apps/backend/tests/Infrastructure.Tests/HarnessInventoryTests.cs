@@ -51,7 +51,7 @@ public sealed class HarnessInventoryTests
         processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>()).Returns(c =>
             Task.FromResult(new ProcessResult(0,
                 c.Arg<ProcessSpec>().FileName.EndsWith("claude", StringComparison.Ordinal)
-                    ? """[{"id":"acme.harness@acme-plugins","version":"1.0.0","scope":"user","enabled":true}]"""
+                    ? """[{"id":"acme.harness@acme-plugins","version":"1.0.0","scope":"user","enabled":true},{"id":"acme.harness@other","version":"7.0.0"}]"""
                     : """{"plugins":[{"name":"acme-harness-v2","marketplace":"acme-plugins","version":"2.0.0"},{"name":"msdc-harness","marketplace":"msdc-plugins","version":"9.9.9"}]}""", "")));
         var options = Options();
         options.Value.HarnessPluginName = "acme.harness";
@@ -64,7 +64,29 @@ public sealed class HarnessInventoryTests
 
         result.Select(r => r.Status).ShouldBe(["installed", "renamed"]);
         result[0].Installations.Single().Version.ShouldBe("1.0.0");
-        logger.Entries.Count(e => e.Level == LogLevel.Warning && e.Template.Contains("{Message}", StringComparison.Ordinal)).ShouldBe(1);
+        logger.Entries.Where(e => e.Level == LogLevel.Warning).Select(e => e.Message).ShouldBe(
+            ["Harness inventory for copilot: A plugin from marketplace acme-plugins is installed under a name other than acme.harness."]);
+    }
+
+    [Fact]
+    public async Task Inventory_warns_once_per_source_when_both_report_a_renamed_plugin()
+    {
+        var locator = Substitute.For<IExecutableLocator>();
+        locator.Locate(Arg.Any<string>()).Returns(c => $"/bin/{c.Arg<string>()}");
+        var processes = Substitute.For<IProcessRunner>();
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>()).Returns(c =>
+            Task.FromResult(new ProcessResult(0,
+                c.Arg<ProcessSpec>().FileName.EndsWith("claude", StringComparison.Ordinal)
+                    ? """[{"id":"msdc-harness-v2@msdc-plugins","version":"1.0.0"}]"""
+                    : """[{"name":"msdc-harness-v2","marketplace":"msdc-plugins","version":"1.0.0"}]""", "")));
+        var logger = new ListLogger<HarnessInventory>();
+        var inventory = new HarnessInventory(locator, processes, Options(), TimeProvider.System, logger);
+
+        var result = await inventory.GetAsync(TestContext.Current.CancellationToken);
+        await inventory.GetAsync(TestContext.Current.CancellationToken, refresh: true);
+
+        result.ShouldAllBe(r => r.Status == "renamed");
+        logger.Entries.Count(e => e.Level == LogLevel.Warning).ShouldBe(2);
     }
 
     [Theory]

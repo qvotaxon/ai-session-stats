@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (2026-11-27). Becomes Accepted when the owner accepts it. The behaviour shipped in pull request #105, which fixed issue #99.
+Proposed (2026-11-27). The behaviour shipped in pull request #105, which fixed issue #99; the owner decides acceptance.
 
 ## Prologue (Summary)
 

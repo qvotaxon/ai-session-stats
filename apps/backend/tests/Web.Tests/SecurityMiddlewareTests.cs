@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -6,11 +7,13 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SessionInsights.Application.Logs;
 using SessionInsights.Application.Common;
+using SessionInsights.Web.Middleware;
 using Shouldly;
 using SessionInsights.Infrastructure.Security;
 using Xunit;
@@ -223,4 +226,40 @@ public sealed class SecurityMiddlewareTests(SecurityFixture factory)
     [Fact]
     public async Task Unknown_api_routes_do_not_fall_back_to_the_spa() =>
         (await Status(Get("/api/v1/nope", withToken: true))).ShouldBe(HttpStatusCode.NotFound);
+
+    [Fact]
+    public async Task Unhandled_exception_log_does_not_include_request_controlled_values()
+    {
+        var logger = new RecordingLogger<ExceptionHandlingMiddleware>();
+        var context = new DefaultHttpContext();
+        context.Request.Method = "GET\r\nForged: entry";
+        context.Request.Path = "/api/\r\nForged: entry";
+        var middleware = new ExceptionHandlingMiddleware(
+            _ => throw new InvalidOperationException("test failure"),
+            logger);
+
+        await middleware.InvokeAsync(context);
+
+        logger.Messages.ShouldBe(["Unhandled exception while processing request"]);
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+        }
+    }
 }

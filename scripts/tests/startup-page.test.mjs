@@ -4,7 +4,13 @@ import test from "node:test";
 import vm from "node:vm";
 
 const html = readFileSync(new URL("../../apps/frontend/public/starting.html", import.meta.url), "utf8");
-const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const scriptStartTag = "<script>";
+const scriptEndTag = "</script>";
+const scriptStart = html.indexOf(scriptStartTag);
+const scriptEnd = html.indexOf(scriptEndTag, scriptStart + scriptStartTag.length);
+assert.notEqual(scriptStart, -1, "The startup page must contain a script");
+assert.notEqual(scriptEnd, -1, "The startup page script must be closed");
+const script = html.slice(scriptStart + scriptStartTag.length, scriptEnd);
 
 function start(hash = "") {
   const timers = new Map();
@@ -71,4 +77,7 @@ test("explains a long wait and rejects invalid ports", () => {
   const invalid = start("#port=99999");
   assert.match(invalid.message.textContent, /invalid/);
   assert.equal(invalid.images.length, 0);
+  const malformed = start("#port=5180@evil.example&path=//evil.example");
+  assert.match(malformed.message.textContent, /invalid/);
+  assert.equal(malformed.images.length, 0);
 });

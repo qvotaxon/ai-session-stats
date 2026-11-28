@@ -63,10 +63,21 @@ function failsWith(name, content, pattern) {
   assert.ok(errors.every((e) => e.startsWith(`${name}: `)), `errors must name the file: ${JSON.stringify(errors)}`);
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const FILE = '0004-x.md';
 
 test('a conforming ADR passes', () => {
   passes(FILE, conforming());
+});
+
+test('regular expression escaping handles backslashes and metacharacters', () => {
+  const literal = String.raw`a\b(c)`;
+  const pattern = new RegExp(escapeRegExp(literal));
+  assert.equal(pattern.test(literal), true);
+  assert.equal(pattern.test('axb(c)'), false);
 });
 
 test('a status line followed by a sentence passes (0011 shape)', () => {
@@ -137,7 +148,7 @@ test('files that are not markdown are ignored', () => {
 
 for (const section of ['Status', 'Prologue (Summary)', 'Discussion (Context)', 'Solution (Decision)', 'Consequences (Results)']) {
   test(`a missing "## ${section}" gives its own error`, () => {
-    const escaped = section.replace(/[()]/g, '\\$&');
+    const escaped = escapeRegExp(section);
     const text = conforming().replace(new RegExp(`## ${escaped}\\n`), '');
     failsWith(FILE, text, new RegExp(`missing "## ${escaped}"`));
   });

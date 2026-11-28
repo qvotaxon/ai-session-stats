@@ -223,8 +223,18 @@ function Test-ReleaseProvenance([string] $archivePath, [string] $bundlePath) {
         $arguments += @('--bundle', $bundlePath)
     }
 
-    $output = & $gh.Source @arguments 2>&1
-    $exitCode = $LASTEXITCODE
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $LASTEXITCODE = $null
+        $output = & $gh.Source @arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($null -eq $exitCode) {
+        throw 'GitHub CLI (gh) could not be started for build provenance verification.'
+    }
     if ($exitCode -eq 0) {
         Write-UpdateLog "Build provenance verified for $archivePath ($([IO.Path]::GetFileName($arguments[-1])))."
         return $null

@@ -21,7 +21,7 @@ These rules apply to every file in `docs/adr/`, for people and for every AI agen
 - The file name is `NNNN-kebab-case-title.md` with a four-digit number, for example `0012-store-reports-as-json.md`. Never use `ADR-NNNN-...`. Do not create an index file.
 - The number is one higher than the highest number that is in use or reserved:
   - in use: a file in `docs/adr/` on `origin/main`, or a file under `docs/adr/` in any open pull request (check each open PR's files, for example with `gh pr view <n> --json files`);
-  - reserved: 0006, 0007, 0009, 0010.
+  - reserved: 0007, 0009, 0010.
 - The pull request that uses a reserved number for its purpose removes it from the list above. Only the owner adds a reservation.
 - Never renumber an existing ADR unless an issue says so (#51 renumbers the duplicate 0003 to 0005). A renumbering changes the file name and the H1 number in the same commit.
 

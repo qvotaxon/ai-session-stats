@@ -14,8 +14,6 @@ Use GitHub private vulnerability reporting: open the repository's **Security** t
 
 If the **Report a vulnerability** button is not offered, do not fall back to a public surface. Open a public issue that says only that you need a private channel, with no details, or hand the report to the repository owner by another private route you already have.
 
-> TODO: confirm (owner): a fallback contact that is neither a personal nor an employer address. None is stated here on purpose.
-
 ## Scope and threat model
 
 The decisions that define the trust boundaries are recorded as ADRs in [docs/adr/](docs/adr/):

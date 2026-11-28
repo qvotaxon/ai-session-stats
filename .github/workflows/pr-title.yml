@@ -1,8 +1,11 @@
 name: PR title
 
+# The job id "pr-title" is meant to be a required status check on main; the owner sets it in the ruleset.
+# Do not rename the job, give it a name:, add an if: condition, or filter the pull_request trigger
+# by paths or branches. A required check that does not run stays pending and blocks the merge.
+
 on:
   pull_request:
-    branches: [main]
     types: [opened, edited, synchronize, reopened]
 
 permissions: {}
@@ -13,7 +16,6 @@ concurrency:
 
 jobs:
   pr-title:
-    name: pr-title
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

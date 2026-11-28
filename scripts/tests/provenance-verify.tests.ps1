@@ -105,3 +105,7 @@ try {
 }
 
 Write-Host 'Provenance verification tests passed.'
+
+# The mocked gh child process leaves a non-zero $LASTEXITCODE; exit explicitly so a
+# passing run reports success regardless of the last native command's exit code.
+exit 0

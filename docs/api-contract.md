@@ -33,8 +33,8 @@ The JSON body must include exactly one of `sessionId` or `projectId`, `cli` (`cl
 `copilot`), and `consent: true`. Optional `from` and `to` are ISO-8601 timestamps with offsets
 (inclusive). These filter request timestamps, not session dates; untimestamped requests only
 participate in unbounded analyses. The service runs the selected locally installed CLI without
-project access or tools, in a temporary working directory. The CLI may send prompts to its
-configured AI service. Session Insights itself does not call an AI web API. Missing consent or
+project access or tools, in a temporary working directory. The CLI may send prompts to the AI
+provider it is configured to use, which Session Insights does not check. Session Insights itself does not call an AI web API. Missing consent or
 invalid filters return 400; unknown scopes return 404; a missing CLI returns 422.
 
 ```json
@@ -56,7 +56,7 @@ skills supported by at least two sampled requests. Evidence includes up to five 
 sessions per skill; totals cover all supporting requests. Prompt text is read from existing
 local session logs and held in memory for analysis; it is never returned by the API or stored
 by Session Insights. Only after explicit user consent is it passed to the selected CLI, which
-may persist its own session history and may send prompts to its configured AI service.
+may persist its own session history and may send prompts to the AI provider it is configured to use.
 
 ### GET /health
 `200 {"status":"Healthy"}`

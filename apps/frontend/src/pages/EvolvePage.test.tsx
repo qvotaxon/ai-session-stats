@@ -106,3 +106,18 @@ it("does not claim the analysis is local or model-free", async () => {
   expect(screen.queryByText(/uses no AI models/i)).not.toBeInTheDocument();
   expect(screen.queryByText(/stays on this device/i)).not.toBeInTheDocument();
 });
+
+it("says the CLI's configured provider receives the requests, for both CLIs", async () => {
+  const user = userEvent.setup();
+  renderApp("/evolve");
+  await screen.findByRole("heading", { name: "Evolve" });
+  expect(screen.getByText(/By default it sends them to GitHub's Copilot service/)).toBeInTheDocument();
+
+  await user.selectOptions(screen.getByLabelText("Local CLI"), "claude");
+
+  expect(screen.getByText(/By default it sends them to Anthropic's service/)).toBeInTheDocument();
+  expect(screen.queryByText(/GitHub's Copilot service/)).not.toBeInTheDocument();
+  expect(screen.getByText(/configure it to use another AI provider/)).toBeInTheDocument();
+  expect(screen.queryByText(/only GitHub/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/never leaves your device/i)).not.toBeInTheDocument();
+});

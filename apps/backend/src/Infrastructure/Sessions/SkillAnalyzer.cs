@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -59,6 +60,7 @@ internal sealed class SkillAnalyzer(
         DateTimeOffset? from,
         DateTimeOffset? to,
         SessionSource cli,
+        SkillAnalysisScope scope,
         CancellationToken cancellationToken)
     {
         var candidates = sessions
@@ -78,8 +80,25 @@ internal sealed class SkillAnalyzer(
                 item.Session.Id,
                 item.Session.Title))
             .ToArray();
+        var inputChars = examples.Sum(example => example.Text.Length);
+        var stopwatch = Stopwatch.StartNew();
+
+        // Counts and codes only: no request text, title, path or model output.
+        void LogAnalysis(string outcome, int stdoutChars = 0, int opportunityCount = 0) =>
+            logger.LogInformation(
+                "Skill analysis finished: Cli={Cli} Scope={Scope} RequestCount={RequestCount} InputChars={InputChars} ElapsedMs={ElapsedMs} Outcome={Outcome} StdoutChars={StdoutChars} OpportunityCount={OpportunityCount}",
+                cli == SessionSource.Claude ? "claude" : "copilot",
+                scope == SkillAnalysisScope.Project ? "project" : "session",
+                examples.Length,
+                inputChars,
+                stopwatch.ElapsedMilliseconds,
+                outcome,
+                stdoutChars,
+                opportunityCount);
+
         if (examples.Length < 2)
         {
+            LogAnalysis("ok");
             return new SkillAnalysis(sessions.Count, examples.Length, sampled, []);
         }
 
@@ -87,6 +106,7 @@ internal sealed class SkillAnalyzer(
         var executable = locator.Locate(cliName);
         if (executable is null)
         {
+            LogAnalysis("cli-error");
             throw new UnprocessableException($"The {cliName} CLI was not found. Install it or select the other CLI.");
         }
 
@@ -107,6 +127,7 @@ internal sealed class SkillAnalyzer(
             if (existedBeforeRun)
             {
                 // --session-id resumes an existing session: launching would append this untrusted input to it.
+                LogAnalysis("cli-error");
                 throw new UnprocessableException("Could not start the analysis. Try again.");
             }
 
@@ -142,10 +163,12 @@ internal sealed class SkillAnalyzer(
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
+                    LogAnalysis("timeout");
                     throw new UnprocessableException("Skill analysis timed out after 2 minutes. Try a smaller date range.");
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
                 {
+                    LogAnalysis("cli-error");
                     throw new UnprocessableException($"Could not run the {cliName} CLI: {ex.Message}");
                 }
             }
@@ -164,11 +187,22 @@ internal sealed class SkillAnalyzer(
         {
             // Codes only: stdout and stderr can hold the user's prompts and the model's reply.
             logger.LogWarning("Skill analysis {Cli} CLI exited with code {ExitCode}", cli, result.ExitCode);
+            LogAnalysis("cli-error", result.StdOut.Length);
             throw new UnprocessableException($"The {cliName} CLI exited with code {result.ExitCode}.");
         }
 
-        var output = cli == SessionSource.Claude ? ClaudeResult(result.StdOut) : result.StdOut;
-        var suggestions = ParseSuggestions(output, cli);
+        SuggestedSkill[] suggestions;
+        try
+        {
+            var output = cli == SessionSource.Claude ? ClaudeResult(result.StdOut) : result.StdOut;
+            suggestions = ParseSuggestions(output, cli);
+        }
+        catch (Exception ex) when (ex is UnprocessableException or JsonException or InvalidOperationException)
+        {
+            LogAnalysis("invalid-json", result.StdOut.Length);
+            throw;
+        }
+
         var byId = examples.ToDictionary(example => example.Id, StringComparer.Ordinal);
         var opportunities = new List<SkillOpportunity>();
         foreach (var suggestion in suggestions.Take(8))
@@ -212,6 +246,7 @@ internal sealed class SkillAnalyzer(
                 evidence));
         }
 
+        LogAnalysis("ok", result.StdOut.Length, opportunities.Count);
         return new SkillAnalysis(sessions.Count, examples.Length, sampled, opportunities);
     }
 
@@ -262,6 +297,11 @@ internal sealed class SkillAnalyzer(
         try
         {
             using var document = JsonDocument.Parse(output);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException();
+            }
+
             return document.RootElement.TryGetProperty("result", out var result) && result.ValueKind == JsonValueKind.String
                 ? result.GetString() ?? string.Empty
                 : output;

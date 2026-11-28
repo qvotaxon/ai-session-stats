@@ -12,8 +12,6 @@ Use GitHub private vulnerability reporting: open the repository's **Security** t
 
 **Do not** put vulnerability details in a public issue, pull request, discussion, comment or commit message.
 
-If the **Report a vulnerability** button is not offered, do not fall back to a public surface. Open a public issue that says only that you need a private channel, with no details, or hand the report to the repository owner by another private route you already have.
-
 ## Scope and threat model
 
 The decisions that define the trust boundaries are recorded as ADRs in [docs/adr/](docs/adr/):

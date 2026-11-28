@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/qvotaxon/ai-session-stats/compare/v1.4.0...v1.4.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* address code scanning findings ([#136](https://github.com/qvotaxon/ai-session-stats/issues/136)) ([ee1a055](https://github.com/qvotaxon/ai-session-stats/commit/ee1a055a49593f41f89c2246581f79f30102bda0))
+
 ## [1.4.0](https://github.com/qvotaxon/ai-session-stats/compare/v1.3.0...v1.4.0) (2026-11-28)
 
 

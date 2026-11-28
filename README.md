@@ -110,7 +110,24 @@ If `RELEASE_PLEASE_TOKEN` is used, prefer a narrowly scoped token stored as a `r
 
 ### Publisher signing
 
-Releases are still unsigned. Authenticode signing requires a trusted code-signing certificate or signing service and credentials configured separately. Signing should cover the installer (including its uninstaller), application executables, and shipped PowerShell scripts before packaging and checksum generation. The updater currently trusts GitHub-hosted release assets and their accompanying checksums; those checksums detect corruption but do not independently authenticate the publisher. Adding updater signature verification requires an explicit publisher trust policy. Signing does not guarantee that browser or SmartScreen reputation warnings disappear immediately.
+Releases are still unsigned. Authenticode signing requires a trusted code-signing certificate or signing service and credentials configured separately. Signing should cover the installer (including its uninstaller), application executables, and shipped PowerShell scripts before packaging and checksum generation. The updater verifies the release archive's build provenance attestation before installing it (see **Verify a release**), in addition to the SHA-256 checksum; neither replaces Authenticode signing, which independently authenticates the publisher to Windows and SmartScreen. Adding updater Authenticode verification requires an explicit publisher trust policy. Signing does not guarantee that browser or SmartScreen reputation warnings disappear immediately.
+
+### Verify a release
+
+Stable release assets carry a signed [build provenance attestation](https://docs.github.com/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds) (Sigstore) that records the repository, commit, workflow and runner that produced each artifact, plus an attested SPDX SBOM for the archive. Verify a downloaded asset with the [GitHub CLI](https://cli.github.com/):
+
+```sh
+gh attestation verify SessionInsights-win-x64.zip --repo qvotaxon/ai-session-stats
+gh attestation verify SessionInsights-Setup.exe --repo qvotaxon/ai-session-stats
+```
+
+Online verification queries GitHub's attestations API and needs `gh auth login`, even for this public repository. For an offline check that needs no authentication, download the published `SessionInsights-win-x64.zip.sigstore.json` bundle next to the archive and pass it with `--bundle`:
+
+```sh
+gh attestation verify SessionInsights-win-x64.zip --repo qvotaxon/ai-session-stats --bundle SessionInsights-win-x64.zip.sigstore.json
+```
+
+The tray updater performs this check automatically after download and before installing, preferring the offline bundle so it needs no authentication. A failed verification aborts the update and leaves the current installation untouched. If `gh` is missing or unauthenticated and no bundle is available, the updater falls back to the SHA-256 checksum and warns that provenance was not verified; a verification that actually fails is always fatal. Previews are manual installs and are not attested.
 
 ### Manual preview installs
 
@@ -120,7 +137,7 @@ To try it, open GitHub Releases, select the preview, and manually download and r
 
 ### Stable updates
 
-After installing a release and registering the tray icon, the tray checks for a stable update when it starts and every four hours. Use **Check for updates** to check on demand, then **Update to vX.Y.Z** to apply it. The updater downloads only assets attached to this repository's HTTPS releases, verifies the archive SHA-256 before extraction, and performs the file swap in a detached process. The previous application folder is kept as a backup; user data under `%LOCALAPPDATA%\SessionInsights` remains outside the app folder. If the new server does not pass its health check within 180 seconds, the updater restores the previous app and scheduled tasks. Update status and failures are shown in a tray balloon or dialog and recorded in `update.log`.
+After installing a release and registering the tray icon, the tray checks for a stable update when it starts and every four hours. Use **Check for updates** to check on demand, then **Update to vX.Y.Z** to apply it. The updater downloads only assets attached to this repository's HTTPS releases, verifies the archive SHA-256 and its build provenance before extraction, and performs the file swap in a detached process. Provenance is checked with `gh attestation verify`, preferring the offline attestation bundle published alongside the release so no GitHub authentication is needed; a failed verification aborts the update and leaves the current install untouched, while a missing or unauthenticated `gh` falls back to the checksum with a visible warning (see [Verify a release](#verify-a-release)). The previous application folder is kept as a backup; user data under `%LOCALAPPDATA%\SessionInsights` remains outside the app folder. If the new server does not pass its health check within 180 seconds, the updater restores the previous app and scheduled tasks. Update status and failures are shown in a tray balloon or dialog and recorded in `update.log`.
 
 Developers updating from a source checkout should continue to use `scripts/update.ps1`.
 

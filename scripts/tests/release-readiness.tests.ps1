@@ -73,13 +73,21 @@ function New-Release([string] $tag, [object[]] $assets) {
 
 $zip = [pscustomobject]@{ name = 'SessionInsights-win-x64.zip'; state = 'uploaded' }
 $checksum = [pscustomobject]@{ name = 'SessionInsights-win-x64.zip.sha256'; state = 'uploaded' }
+$bundle = [pscustomobject]@{ name = 'SessionInsights-win-x64.zip.sigstore.json'; state = 'uploaded' }
 $incomplete = New-Release 'v1.0.4' @($zip)
 $complete = New-Release 'v1.0.4' @($zip, $checksum)
+$completeWithBundle = New-Release 'v1.0.4' @($zip, $checksum, $bundle)
 
 $script:releases = @($incomplete, $complete)
-$assets = @(Get-ReleaseAssets)
-Assert ($assets.Count -eq 2 -and $assets[0] -eq $zip -and $assets[1] -eq $checksum) 'Updater did not return both assets.'
+$assets = Get-ReleaseAssets
+Assert ($assets[0] -eq $zip -and $assets[1] -eq $checksum -and $null -eq $assets[2]) 'Updater did not return the archive and checksum without a bundle.'
 Assert ($script:calls -eq 2 -and $script:sleeps -eq 1) 'Updater did not retry once.'
+
+$script:calls = 0
+$script:sleeps = 0
+$script:releases = @($completeWithBundle)
+$assets = Get-ReleaseAssets
+Assert ($assets[0] -eq $zip -and $assets[1] -eq $checksum -and $assets[2] -eq $bundle) 'Updater did not return the provenance bundle when published.'
 
 $script:calls = 0
 $script:sleeps = 0
@@ -211,5 +219,16 @@ Assert ($script:versionItem.Text -eq 'Installed version: 1.0.3') 'The menu hid t
 Assert (-not $script:updateAvailable.Visible -and -not $script:latestTag) 'The menu retained a stale update after a failed check.'
 Assert ($script:checkForUpdates.ToolTipText -like '*rate limit reached*') 'The menu did not expose the background check error.'
 Assert ($script:checkForUpdates.Enabled -and -not $script:updateCheck) 'The menu did not finish its update check.'
+
+# The packaging workflow must attest provenance and an SBOM with least-privilege permissions.
+$workflow = Get-Content (Join-Path $root '.github/workflows/package-release.yml') -Raw
+Assert ($workflow -match 'actions/attest-build-provenance@[0-9a-f]{40}') 'The workflow does not pin actions/attest-build-provenance by SHA.'
+Assert ($workflow -match 'actions/attest-sbom@[0-9a-f]{40}') 'The workflow does not pin actions/attest-sbom by SHA.'
+Assert ($workflow -match 'anchore/sbom-action@[0-9a-f]{40}') 'The workflow does not pin the SBOM generator by SHA.'
+Assert (([regex]::Matches($workflow, 'id-token:\s*write')).Count -ge 2) 'The build and installer jobs do not both request id-token: write.'
+Assert (([regex]::Matches($workflow, 'attestations:\s*write')).Count -ge 2) 'The build and installer jobs do not both request attestations: write.'
+Assert (([regex]::Matches($workflow, 'if:\s*inputs\.preview == false')).Count -ge 3) 'The attest steps are not all gated to the non-preview release path.'
+Assert ($workflow -match 'SessionInsights-win-x64\.spdx\.json') 'The workflow does not produce an SBOM asset.'
+Assert ($workflow -match 'SessionInsights-win-x64\.zip\.sigstore\.json') 'The workflow does not publish the provenance bundle for offline verification.'
 
 Write-Host 'Release readiness tests passed.'

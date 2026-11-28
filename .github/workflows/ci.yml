@@ -68,6 +68,8 @@ jobs:
           node-version: 22
       - name: Release readiness tests
         run: ./scripts/tests/release-readiness.tests.ps1
+      - name: Provenance verification tests
+        run: ./scripts/tests/provenance-verify.tests.ps1
       - name: Update lock tests
         run: ./scripts/tests/update-lock.tests.ps1
       - name: Claude statusline tests

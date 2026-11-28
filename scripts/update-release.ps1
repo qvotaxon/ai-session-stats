@@ -28,6 +28,7 @@ $appMoved = $false
 $lockPath = Join-Path $dataRoot 'update.lock'
 $lockStream = $null
 $failureMessage = $null
+$provenanceWarning = $null
 
 function Write-UpdateLog([string] $message) {
     Add-Content -Path $logPath -Value "[$(Get-Date -Format o)] $message"
@@ -185,6 +186,7 @@ function Restore-PreviousInstall {
 function Get-ReleaseAssets {
     $zipName = 'SessionInsights-win-x64.zip'
     $checksumName = "$zipName.sha256"
+    $bundleName = "$zipName.sigstore.json"
     for ($attempt = 1; $attempt -le 5; $attempt++) {
         $release = Invoke-RestMethod -Uri $releaseApi -Headers $headers -TimeoutSec 15
         if ($release.tag_name -ne $ExpectedTag -or $release.prerelease -or $release.draft) {
@@ -193,8 +195,9 @@ function Get-ReleaseAssets {
 
         $zipAsset = $release.assets | Where-Object { $_.name -eq $zipName -and $_.state -eq 'uploaded' } | Select-Object -First 1
         $checksumAsset = $release.assets | Where-Object { $_.name -eq $checksumName -and $_.state -eq 'uploaded' } | Select-Object -First 1
+        $bundleAsset = $release.assets | Where-Object { $_.name -eq $bundleName -and $_.state -eq 'uploaded' } | Select-Object -First 1
         if ($zipAsset -and $checksumAsset) {
-            return @($zipAsset, $checksumAsset)
+            return @($zipAsset, $checksumAsset, $bundleAsset)
         }
         if ($attempt -lt 5) {
             Write-UpdateLog "Release assets are not ready; retrying (attempt $attempt of 5)."
@@ -202,6 +205,36 @@ function Get-ReleaseAssets {
         }
     }
     throw 'The release is missing its application archive or SHA-256 checksum. Try again later.'
+}
+
+# Verification policy: a failed verification is always fatal; an unavailable verifier (gh missing
+# or unauthenticated, no local bundle) falls back to the SHA-256 check with a visible warning.
+# This policy is intentionally one switch: it either throws (fatal) or returns a warning string.
+function Test-ReleaseProvenance([string] $archivePath, [string] $bundlePath) {
+    $gh = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $gh) {
+        return 'GitHub CLI (gh) is not installed, so the build provenance of this update could not be verified. The download was accepted on its SHA-256 checksum only.'
+    }
+
+    $arguments = @('attestation', 'verify', $archivePath, '--repo', $repository)
+    $offline = $bundlePath -and (Test-Path -LiteralPath $bundlePath)
+    if ($offline) {
+        # Offline verification with a published bundle needs no gh authentication.
+        $arguments += @('--bundle', $bundlePath)
+    }
+
+    $output = & $gh.Source @arguments 2>&1
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -eq 0) {
+        Write-UpdateLog "Build provenance verified for $archivePath ($([IO.Path]::GetFileName($arguments[-1])))."
+        return $null
+    }
+
+    $text = ($output | Out-String).Trim()
+    if (-not $offline -and $text -match '(?i)auth|login|token|credential|unauthenticated|401|403') {
+        return "The build provenance of this update could not be verified because GitHub CLI (gh) is not authenticated and no offline attestation bundle was published. The download was accepted on its SHA-256 checksum only. Details: $text"
+    }
+    throw "The downloaded release failed build provenance verification. $text"
 }
 
 try {
@@ -226,9 +259,11 @@ try {
     $headers = @{ 'User-Agent' = 'SessionInsightsTray'; 'Cache-Control' = 'no-cache' }
     $zipName = 'SessionInsights-win-x64.zip'
     $checksumName = "$zipName.sha256"
-    $zipAsset, $checksumAsset = Get-ReleaseAssets
+    $bundleName = "$zipName.sigstore.json"
+    $zipAsset, $checksumAsset, $bundleAsset = Get-ReleaseAssets
 
-    foreach ($asset in @($zipAsset, $checksumAsset)) {
+    foreach ($asset in @($zipAsset, $checksumAsset, $bundleAsset)) {
+        if (-not $asset) { continue }
         $uri = [Uri]$asset.browser_download_url
         $expectedPrefix = "/$repository/releases/download/$ExpectedTag/"
         if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'github.com' -or -not $uri.AbsolutePath.StartsWith($expectedPrefix, [StringComparison]::Ordinal)) {
@@ -238,8 +273,13 @@ try {
 
     $archivePath = Join-Path $packageRoot $zipName
     $checksumPath = Join-Path $packageRoot $checksumName
+    $bundlePath = $null
     Invoke-WebRequest -Uri $zipAsset.browser_download_url -OutFile $archivePath -Headers $headers -TimeoutSec 120 -UseBasicParsing
     Invoke-WebRequest -Uri $checksumAsset.browser_download_url -OutFile $checksumPath -Headers $headers -TimeoutSec 30 -UseBasicParsing
+    if ($bundleAsset) {
+        $bundlePath = Join-Path $packageRoot $bundleName
+        Invoke-WebRequest -Uri $bundleAsset.browser_download_url -OutFile $bundlePath -Headers $headers -TimeoutSec 30 -UseBasicParsing
+    }
 
     $checksumText = Get-Content -LiteralPath $checksumPath -Raw
     $checksumMatch = [regex]::Match($checksumText, '^\s*([a-fA-F0-9]{64})(?:\s+\*?SessionInsights-win-x64\.zip)?\s*$')
@@ -249,6 +289,11 @@ try {
     $actualHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
     if (-not [string]::Equals($actualHash, $checksumMatch.Groups[1].Value, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'The downloaded release failed its SHA-256 check.'
+    }
+
+    $provenanceWarning = Test-ReleaseProvenance $archivePath $bundlePath
+    if ($provenanceWarning) {
+        Write-UpdateLog "Provenance warning: $provenanceWarning"
     }
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -351,4 +396,7 @@ finally {
 if ($failureMessage) {
     Add-Type -AssemblyName System.Windows.Forms
     [System.Windows.Forms.MessageBox]::Show("Session Insights could not be updated.`n$failureMessage", 'Session Insights update failed', 'OK', 'Error') | Out-Null
+} elseif ($provenanceWarning) {
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.MessageBox]::Show("Session Insights was updated, but its build provenance was not verified.`n$provenanceWarning", 'Session Insights provenance not verified', 'OK', 'Warning') | Out-Null
 }

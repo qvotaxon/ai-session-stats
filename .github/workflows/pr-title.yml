@@ -1,0 +1,37 @@
+name: PR title
+
+# The job id "pr-title" is meant to be a required status check on main; the owner sets it in the ruleset.
+# Do not rename the job, give it a name:, add an if: condition, or filter the pull_request trigger
+# by paths or branches. A required check that does not run stays pending and blocks the merge.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check that the title is a plain Conventional Commit
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          types='feat|fix|perf|deps|revert|docs|style|chore|refactor|test|build|ci'
+          re="^(${types})(\([a-z0-9._/-]+\))?!?: [^[:space:]].*$"
+          if [[ $PR_TITLE == \[* ]]; then
+            echo "::error title=PR title::The title starts with '['. Remove the [ai-session-stats] prefix: titles here are plain Conventional Commits. See CONTRIBUTING.md, pick-up step 6."
+            exit 1
+          fi
+          if ! [[ $PR_TITLE =~ $re ]]; then
+            echo "::error title=PR title::The title is not a plain Conventional Commit such as 'feat: show delivered points per sprint'. Use '<type>: <summary>' or '<type>(<scope>): <summary>', with type one of: ${types//|/, }. See CONTRIBUTING.md, pick-up step 6."
+            exit 1
+          fi
+          echo "The PR title is a plain Conventional Commit."

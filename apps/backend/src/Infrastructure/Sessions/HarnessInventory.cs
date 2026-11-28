@@ -26,8 +26,13 @@ internal sealed class HarnessInventory(
     private DateTimeOffset refreshedAt;
     private readonly ConcurrentDictionary<string, bool> renameWarned = [];
 
-    private static (string Name, string? Marketplace) SplitId(string id)
+    private static (string? Name, string? Marketplace) SplitId(string? id)
     {
+        if (id is null)
+        {
+            return (null, null);
+        }
+
         var at = id.LastIndexOf('@');
         return at < 0 ? (id, null) : (id[..at], id[(at + 1)..]);
     }
@@ -101,7 +106,7 @@ internal sealed class HarnessInventory(
                 }
 
                 var (name, marketplace) = source == SessionSource.Claude
-                    ? SplitId(plugin.Str("id")!)
+                    ? SplitId(plugin.Str("id"))
                     : (plugin.Str("name"), plugin.Str("marketplace"));
                 if (marketplace == options.Value.HarnessMarketplace && name != options.Value.HarnessPluginName)
                 {

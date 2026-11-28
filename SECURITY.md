@@ -70,11 +70,9 @@ Follow every rule here. A report that ignores them may be closed unread.
 
 ## What to expect
 
-Recommended defaults for a solo-maintained project, best effort:
+This is a solo-maintained project, so all of this is best effort:
 
 - acknowledgement within 7 days and initial triage within 14 days; no fixed time to a fix;
 - coordinated disclosure: please keep details private until a fix is released or we agree on a date;
 - credit by name or handle on request;
 - no bounty.
-
-> TODO: confirm (owner): the response times, the credit policy, the bounty stance and any safe-harbour wording for good-faith research. Until then, no safe-harbour is promised.

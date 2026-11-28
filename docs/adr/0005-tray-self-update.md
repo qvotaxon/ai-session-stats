@@ -1,4 +1,6 @@
-# ADR-0003 – Tray self-update from GitHub Releases
+# ADR-0005 – Tray self-update from GitHub Releases
+
+Formerly numbered 0003 (`0003-tray-self-update.md`); renumbered to resolve a duplicate number (#51).
 
 ## Status
 

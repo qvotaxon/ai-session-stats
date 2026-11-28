@@ -31,3 +31,7 @@ Each release also ships `SessionInsights-Setup.exe` (plus `.sha256`), built with
 - Setup version in Add/Remove Programs is the version it was built from, not the version the updater later installs.
 - Signing the installer later only needs a signing step in the `installer` job.
 - MSI/WiX and MSIX were rejected: heavier, admin-oriented or harder to combine with self-updating.
+
+## Amendment 2026-11-28: The tray updater is ADR-0005 (#131)
+
+This amendment changes no decision above. The Discussion refers to the tray updater as "ADR 0003". That number was renumbered: the tray updater is ADR-0005 (`0005-tray-self-update.md`, #51), and ADR-0003 is now only the continue-in-CLI launch record.

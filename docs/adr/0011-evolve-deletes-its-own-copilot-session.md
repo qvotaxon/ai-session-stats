@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (2026-11-27). Becomes Accepted when the #99 pull request merges.
+Proposed (2026-11-27). The behaviour shipped in pull request #105, which fixed issue #99; the owner decides acceptance.
 
 ## Prologue (Summary)
 
@@ -23,7 +23,7 @@ The folder's `events.jsonl` holds the full digest.
 
 Forces:
 
-- The owner decided that Evolve must be safe to ship in the #99 PR, which includes not leaving digests in the user's history.
+- The owner decided that Evolve must be safe to ship in the pull request that fixes #99 (#105), which includes not leaving digests in the user's history.
 - The CLI reference documents no flag that skips persistence and no non-interactive session delete. Deleting is only possible in the
   interactive picker.
 - `--session-id <id>` is resume-or-create: an existing session with that id would be resumed and appended to. So the id has to be fresh, and

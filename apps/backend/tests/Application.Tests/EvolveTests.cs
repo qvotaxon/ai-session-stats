@@ -95,6 +95,7 @@ public sealed class EvolveTests
         public DateTimeOffset? From { get; private set; }
         public DateTimeOffset? To { get; private set; }
         public SessionSource Cli { get; private set; }
+        public SkillAnalysisScope Scope { get; private set; }
         public SkillAnalysis Result { get; set; } = new(0, 0, false, []);
 
         public Task<SkillAnalysis> AnalyzeAsync(
@@ -102,12 +103,14 @@ public sealed class EvolveTests
             DateTimeOffset? from,
             DateTimeOffset? to,
             SessionSource cli,
+            SkillAnalysisScope scope,
             CancellationToken cancellationToken)
         {
             Sessions = sessions;
             From = from;
             To = to;
             Cli = cli;
+            Scope = scope;
             return Task.FromResult(Result);
         }
     }

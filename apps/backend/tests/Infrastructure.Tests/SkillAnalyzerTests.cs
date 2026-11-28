@@ -105,7 +105,7 @@ public sealed class SkillAnalyzerTests
         };
         var analyzer = Analyzer();
 
-        var result = await analyzer.AnalyzeAsync([first, second], Start.AddDays(1), null, SessionSource.Copilot,
+        var result = await analyzer.AnalyzeAsync([first, second], Start.AddDays(1), null, SessionSource.Copilot, SkillAnalysisScope.Session,
             TestContext.Current.CancellationToken);
 
         result.SessionsScanned.ShouldBe(2);
@@ -159,7 +159,7 @@ public sealed class SkillAnalyzerTests
         processes.RunAsync(Arg.Do<ProcessSpec>(spec => captured = spec), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty)));
 
-        await Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+        await Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken);
 
         captured.ShouldNotBeNull();
         captured.Environment.ShouldNotBeNull();
@@ -191,7 +191,7 @@ public sealed class SkillAnalyzerTests
         var noHome = Options();
         var noHomeCleanup = new CopilotEvolveSessionCleanup(fs, noHome, NullLogger<CopilotEvolveSessionCleanup>.Instance);
 
-        await Analyzer(noHomeCleanup, noHome).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+        await Analyzer(noHomeCleanup, noHome).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken);
 
         captured.ShouldNotBeNull();
         captured.Environment.ShouldBeNull();
@@ -205,7 +205,7 @@ public sealed class SkillAnalyzerTests
         locator.Locate("copilot").Returns("/usr/bin/copilot");
         CliCreatesSessionAndReturns("""{"opportunities":[]}""");
 
-        await Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+        await Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken);
 
         fs.Directory.GetDirectories($@"{CopilotHome}\session-state").ShouldBeEmpty();
     }
@@ -217,7 +217,7 @@ public sealed class SkillAnalyzerTests
         CliCreatesSessionAndReturns(string.Empty, exitCode: 1);
 
         var failure = await Should.ThrowAsync<UnprocessableException>(() =>
-            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken));
+            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken));
 
         failure.Message.ShouldBe("The copilot CLI exited with code 1.");
         fs.Directory.GetDirectories($@"{CopilotHome}\session-state").ShouldBeEmpty();
@@ -230,7 +230,7 @@ public sealed class SkillAnalyzerTests
         CliCreatesSessionAndReturns("this is not json");
 
         var failure = await Should.ThrowAsync<UnprocessableException>(() =>
-            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken));
+            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken));
 
         failure.Message.ShouldBe("The selected CLI returned an invalid skill analysis. Try again.");
         fs.Directory.GetDirectories($@"{CopilotHome}\session-state").ShouldBeEmpty();
@@ -244,14 +244,60 @@ public sealed class SkillAnalyzerTests
         CliCreatesSessionAndReturns($"I will look at the history. {secret}");
 
         await Should.ThrowAsync<UnprocessableException>(() =>
-            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken));
+            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken));
 
-        var entry = analyzerLog.Entries.ShouldHaveSingleItem();
+        var entry = analyzerLog.Entries.Where(e => e.Level == LogLevel.Warning).ShouldHaveSingleItem();
         entry.Level.ShouldBe(LogLevel.Warning);
         entry.Properties["Cli"].ShouldBe(SessionSource.Copilot);
         entry.Properties.ContainsKey("ExitCode").ShouldBeFalse();
         entry.Properties["OutputLength"].ShouldBe($"I will look at the history. {secret}".Length);
         analyzerLog.AllText().ShouldNotContain(text => text.Contains(secret));
+    }
+
+    [Fact]
+    public async Task Logs_one_information_line_with_sizes_and_outcome_but_no_request_text_or_output()
+    {
+        const string secret = "SECRET-REQUEST-TEXT";
+        const string reply = "{\"opportunities\":[]}";
+        locator.Locate("claude").Returns("/usr/bin/claude");
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessResult(0, $$"""{"result":"{\"opportunities\":[]}"}""", string.Empty)));
+        var session = new Session
+        {
+            Id = "session-a",
+            Title = "TITLE-SECRET",
+            Source = SessionSource.Claude,
+            SkillPrompts = [new SkillPrompt(secret, Start), new SkillPrompt(secret, Start.AddMinutes(1))],
+        };
+
+        await Analyzer().AnalyzeAsync([session], null, null, SessionSource.Claude, SkillAnalysisScope.Project, TestContext.Current.CancellationToken);
+
+        var entry = analyzerLog.Entries.ShouldHaveSingleItem();
+        entry.Level.ShouldBe(LogLevel.Information);
+        entry.Properties["Cli"].ShouldBe("claude");
+        entry.Properties["Scope"].ShouldBe("project");
+        entry.Properties["RequestCount"].ShouldBe(2);
+        entry.Properties["InputChars"].ShouldBe(secret.Length * 2);
+        entry.Properties["Outcome"].ShouldBe("ok");
+        entry.Properties["StdoutChars"].ShouldBe($$"""{"result":"{\"opportunities\":[]}"}""".Length);
+        entry.Properties["OpportunityCount"].ShouldBe(0);
+        entry.Properties["ElapsedMs"].ShouldBeOfType<long>();
+        analyzerLog.AllText().ShouldNotContain(text => text.Contains(secret) || text.Contains("TITLE-SECRET") || text.Contains(reply));
+    }
+
+    [Fact]
+    public async Task Logs_the_invalid_json_outcome_when_the_output_cannot_be_parsed()
+    {
+        locator.Locate("copilot").Returns("/usr/bin/copilot");
+        CliCreatesSessionAndReturns("not json");
+
+        await Should.ThrowAsync<UnprocessableException>(() =>
+            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken));
+
+        var entry = analyzerLog.Entries.Single(e => e.Level == LogLevel.Information);
+        entry.Properties["Outcome"].ShouldBe("invalid-json");
+        entry.Properties["Scope"].ShouldBe("session");
+        entry.Properties["StdoutChars"].ShouldBe("not json".Length);
     }
 
     [Fact]
@@ -268,10 +314,10 @@ public sealed class SkillAnalyzerTests
             });
 
         var failure = await Should.ThrowAsync<UnprocessableException>(() =>
-            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken));
+            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken));
 
         failure.Message.ShouldBe("The copilot CLI exited with code 1.");
-        var entry = analyzerLog.Entries.ShouldHaveSingleItem();
+        var entry = analyzerLog.Entries.Where(e => e.Level == LogLevel.Warning).ShouldHaveSingleItem();
         entry.Level.ShouldBe(LogLevel.Warning);
         entry.Properties["Cli"].ShouldBe(SessionSource.Copilot);
         entry.Properties["ExitCode"].ShouldBe(1);
@@ -297,7 +343,7 @@ public sealed class SkillAnalyzerTests
                 throw new OperationCanceledException();
             });
 
-        var analysis = Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, caller.Token);
+        var analysis = Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, caller.Token);
 
         if (callerCancels)
         {
@@ -321,8 +367,8 @@ public sealed class SkillAnalyzerTests
             .Returns(Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty)));
         var analyzer = Analyzer();
 
-        await analyzer.AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
-        await analyzer.AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+        await analyzer.AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken);
+        await analyzer.AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken);
 
         ids.Count.ShouldBe(2);
         ids[0].ShouldNotBe(ids[1]);
@@ -341,7 +387,7 @@ public sealed class SkillAnalyzerTests
                 return Task.FromResult(new ProcessResult(0, """{"opportunities":[]}""", string.Empty));
             });
 
-        var result = await Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+        var result = await Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken);
 
         result.RequestsAnalyzed.ShouldBe(2);
         id.ShouldNotBeNull();
@@ -358,7 +404,7 @@ public sealed class SkillAnalyzerTests
         failing.RemoveAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EvolveSessionCleanupOutcome.Failed));
 
-        var result = await Analyzer(failing).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+        var result = await Analyzer(failing).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken);
 
         result.RequestsAnalyzed.ShouldBe(2);
         await failing.Received(1).RemoveAsync(Arg.Any<string>(), false, Arg.Any<CancellationToken>());
@@ -383,7 +429,7 @@ public sealed class SkillAnalyzerTests
                 return Task.FromResult(EvolveSessionCleanupOutcome.Removed);
             });
 
-        await Analyzer(recording).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken);
+        await Analyzer(recording).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken);
 
         events.ShouldBe(["run", "cleanup:lease=True"]);
         activity.HasActiveAnalysis.ShouldBeFalse();
@@ -397,7 +443,7 @@ public sealed class SkillAnalyzerTests
         existing.Exists(Arg.Any<string>()).Returns(true);
 
         var failure = await Should.ThrowAsync<UnprocessableException>(() =>
-            Analyzer(existing).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, TestContext.Current.CancellationToken));
+            Analyzer(existing).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken));
 
         failure.Message.ShouldBe("Could not start the analysis. Try again.");
         await processes.DidNotReceive().RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>());
@@ -412,7 +458,7 @@ public sealed class SkillAnalyzerTests
             .Returns(Task.FromResult(new ProcessResult(0, """{"result":"{\"opportunities\":[]}"}""", string.Empty)));
         var untouched = Substitute.For<IEvolveSessionCleanup>();
 
-        await Analyzer(untouched).AnalyzeAsync(TwoRequests(SessionSource.Claude), null, null, SessionSource.Claude, TestContext.Current.CancellationToken);
+        await Analyzer(untouched).AnalyzeAsync(TwoRequests(SessionSource.Claude), null, null, SessionSource.Claude, SkillAnalysisScope.Session, TestContext.Current.CancellationToken);
 
         untouched.ReceivedCalls().ShouldBeEmpty();
     }
@@ -489,7 +535,7 @@ public sealed class SkillAnalyzerTests
         };
         var analyzer = Analyzer();
 
-        await analyzer.AnalyzeAsync([session], null, null, cli, TestContext.Current.CancellationToken);
+        await analyzer.AnalyzeAsync([session], null, null, cli, SkillAnalysisScope.Session, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -503,7 +549,7 @@ public sealed class SkillAnalyzerTests
         };
         var analyzer = Analyzer();
 
-        var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Claude,
+        var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Claude, SkillAnalysisScope.Session,
             TestContext.Current.CancellationToken);
 
         result.RequestsAnalyzed.ShouldBe(1);
@@ -532,7 +578,7 @@ public sealed class SkillAnalyzerTests
         options.Value.ClaudeConfigDir = "/tmp/claude-config";
         var analyzer = Analyzer();
 
-        var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Claude,
+        var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Claude, SkillAnalysisScope.Session,
             TestContext.Current.CancellationToken);
 
         result.Opportunities.Single().Title.ShouldBe("Build checks");
@@ -572,7 +618,7 @@ public sealed class SkillAnalyzerTests
         };
         var analyzer = Analyzer();
 
-        var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Copilot,
+        var result = await analyzer.AnalyzeAsync([session], null, null, SessionSource.Copilot, SkillAnalysisScope.Session,
             TestContext.Current.CancellationToken);
 
         result.RequestsAnalyzed.ShouldBe(2);

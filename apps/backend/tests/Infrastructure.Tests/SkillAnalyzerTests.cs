@@ -301,6 +301,22 @@ public sealed class SkillAnalyzerTests
     }
 
     [Fact]
+    public async Task Logs_invalid_json_for_a_non_object_claude_envelope()
+    {
+        locator.Locate("claude").Returns("/usr/bin/claude");
+        processes.RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessResult(0, "[]", string.Empty)));
+
+        await Should.ThrowAsync<UnprocessableException>(() =>
+            Analyzer().AnalyzeAsync(TwoRequests(SessionSource.Claude), null, null, SessionSource.Claude, SkillAnalysisScope.Session, TestContext.Current.CancellationToken));
+
+        var entry = analyzerLog.Entries.Single(e => e.Level == LogLevel.Information);
+        entry.Properties["Outcome"].ShouldBe("invalid-json");
+        entry.Properties["StdoutChars"].ShouldBe(2);
+        analyzerLog.AllText().ShouldNotContain(text => text.Contains("[]"));
+    }
+
+    [Fact]
     public async Task Logs_the_cli_and_exit_code_without_the_process_output_when_the_cli_exits_nonzero()
     {
         const string stdoutSecret = "STDOUT-PROSE-FROM-THE-MODEL-7";
@@ -446,8 +462,28 @@ public sealed class SkillAnalyzerTests
             Analyzer(existing).AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Session, TestContext.Current.CancellationToken));
 
         failure.Message.ShouldBe("Could not start the analysis. Try again.");
+        var entry = analyzerLog.Entries.ShouldHaveSingleItem();
+        entry.Level.ShouldBe(LogLevel.Information);
+        entry.Properties["Outcome"].ShouldBe("cli-error");
+        entry.Properties["StdoutChars"].ShouldBe(0);
+        entry.Properties["OpportunityCount"].ShouldBe(0);
         await processes.DidNotReceive().RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>());
         await existing.DidNotReceive().RemoveAsync(Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Logs_cli_error_when_the_executable_is_missing()
+    {
+        locator.Locate("copilot").Returns((string?)null);
+
+        await Should.ThrowAsync<UnprocessableException>(() =>
+            Analyzer().AnalyzeAsync(TwoRequests(), null, null, SessionSource.Copilot, SkillAnalysisScope.Project, TestContext.Current.CancellationToken));
+
+        var entry = analyzerLog.Entries.ShouldHaveSingleItem();
+        entry.Level.ShouldBe(LogLevel.Information);
+        entry.Properties["Outcome"].ShouldBe("cli-error");
+        entry.Properties["StdoutChars"].ShouldBe(0);
+        entry.Properties["OpportunityCount"].ShouldBe(0);
     }
 
     [Fact]
@@ -554,6 +590,12 @@ public sealed class SkillAnalyzerTests
 
         result.RequestsAnalyzed.ShouldBe(1);
         result.Opportunities.ShouldBeEmpty();
+        var entry = analyzerLog.Entries.ShouldHaveSingleItem();
+        entry.Level.ShouldBe(LogLevel.Information);
+        entry.Properties["Outcome"].ShouldBe("ok");
+        entry.Properties["RequestCount"].ShouldBe(1);
+        entry.Properties["StdoutChars"].ShouldBe(0);
+        entry.Properties["OpportunityCount"].ShouldBe(0);
         await processes.DidNotReceive().RunAsync(Arg.Any<ProcessSpec>(), Arg.Any<CancellationToken>());
     }
 

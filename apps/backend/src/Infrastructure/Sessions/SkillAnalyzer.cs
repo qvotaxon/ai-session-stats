@@ -80,8 +80,25 @@ internal sealed class SkillAnalyzer(
                 item.Session.Id,
                 item.Session.Title))
             .ToArray();
+        var inputChars = examples.Sum(example => example.Text.Length);
+        var stopwatch = Stopwatch.StartNew();
+
+        // Counts and codes only: no request text, title, path or model output.
+        void LogAnalysis(string outcome, int stdoutChars = 0, int opportunityCount = 0) =>
+            logger.LogInformation(
+                "Skill analysis finished: Cli={Cli} Scope={Scope} RequestCount={RequestCount} InputChars={InputChars} ElapsedMs={ElapsedMs} Outcome={Outcome} StdoutChars={StdoutChars} OpportunityCount={OpportunityCount}",
+                cli == SessionSource.Claude ? "claude" : "copilot",
+                scope == SkillAnalysisScope.Project ? "project" : "session",
+                examples.Length,
+                inputChars,
+                stopwatch.ElapsedMilliseconds,
+                outcome,
+                stdoutChars,
+                opportunityCount);
+
         if (examples.Length < 2)
         {
+            LogAnalysis("ok");
             return new SkillAnalysis(sessions.Count, examples.Length, sampled, []);
         }
 
@@ -89,6 +106,7 @@ internal sealed class SkillAnalyzer(
         var executable = locator.Locate(cliName);
         if (executable is null)
         {
+            LogAnalysis("cli-error");
             throw new UnprocessableException($"The {cliName} CLI was not found. Install it or select the other CLI.");
         }
 
@@ -109,6 +127,7 @@ internal sealed class SkillAnalyzer(
             if (existedBeforeRun)
             {
                 // --session-id resumes an existing session: launching would append this untrusted input to it.
+                LogAnalysis("cli-error");
                 throw new UnprocessableException("Could not start the analysis. Try again.");
             }
 
@@ -118,22 +137,6 @@ internal sealed class SkillAnalyzer(
         // The Copilot CLI turns "@<path>" in piped input into a file attachment, so escape it (same JSON meaning).
         var standardInput = cli == SessionSource.Claude ? input : $"{prompt}\n\n{input.Replace("@", EscapedAt)}";
         var environment = CliEnvironment(cli);
-
-        var inputChars = examples.Sum(example => example.Text.Length);
-        var stopwatch = Stopwatch.StartNew();
-
-        // Counts and codes only: no request text, title, path or model output.
-        void LogAnalysis(string outcome, int stdoutChars = 0, int opportunityCount = 0) =>
-            logger.LogInformation(
-                "Skill analysis finished: Cli={Cli} Scope={Scope} RequestCount={RequestCount} InputChars={InputChars} ElapsedMs={ElapsedMs} Outcome={Outcome} StdoutChars={StdoutChars} OpportunityCount={OpportunityCount}",
-                cli == SessionSource.Claude ? "claude" : "copilot",
-                scope == SkillAnalysisScope.Project ? "project" : "session",
-                examples.Length,
-                inputChars,
-                stopwatch.ElapsedMilliseconds,
-                outcome,
-                stdoutChars,
-                opportunityCount);
 
         ProcessResult result;
         using (activity.BeginAnalysis())
@@ -188,13 +191,13 @@ internal sealed class SkillAnalyzer(
             throw new UnprocessableException($"The {cliName} CLI exited with code {result.ExitCode}.");
         }
 
-        var output = cli == SessionSource.Claude ? ClaudeResult(result.StdOut) : result.StdOut;
         SuggestedSkill[] suggestions;
         try
         {
+            var output = cli == SessionSource.Claude ? ClaudeResult(result.StdOut) : result.StdOut;
             suggestions = ParseSuggestions(output, cli);
         }
-        catch (UnprocessableException)
+        catch (Exception ex) when (ex is UnprocessableException or JsonException or InvalidOperationException)
         {
             LogAnalysis("invalid-json", result.StdOut.Length);
             throw;
@@ -294,6 +297,11 @@ internal sealed class SkillAnalyzer(
         try
         {
             using var document = JsonDocument.Parse(output);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException();
+            }
+
             return document.RootElement.TryGetProperty("result", out var result) && result.ValueKind == JsonValueKind.String
                 ? result.GetString() ?? string.Empty
                 : output;

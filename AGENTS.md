@@ -8,7 +8,7 @@ ADRs in `docs/adr/` use the Alexandrian template, always. Before you create, con
 
 ## Repository conventions
 
-Always: never merge, close or approve a pull request, or close an issue; the owner does. The issue, scope, test, package and public-text rules also always apply. The branch, commit and pull request rules apply only to tasks that change tracked files; read-only tasks (questions, reviews, plans kept in `.msdc/local/`) skip them.
+Always: never merge, close or approve a pull request, or close an issue; the owner does. The issue, scope, test, package and public-text rules also always apply. The branch, commit and pull request rules apply only to tasks that change tracked files; read-only tasks (questions, reviews, plans kept in `.msdc/local/`) skip them. The trust rules in `CONTRIBUTING.md` also always apply; its agent pick-up protocol applies when you pick up an issue.
 
 ### Branch and worktree
 
